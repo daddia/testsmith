@@ -1,0 +1,11 @@
+[build]
+
+[tool.hatch.build.targets.sdist]
+
+[tool.hatch.build.targets.wheel]
+packages = ["qa_agent"]
+include = ["qa_agent/**"]
+
+[tool.hatch.version]
+path = "qa_agent/__init__.py"
+pattern = '__version__ = "(.*)"'

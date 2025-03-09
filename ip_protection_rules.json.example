@@ -1,0 +1,17 @@
+
+{
+    "patterns": [
+        "SECRET_ALGORITHM\\([^)]*\\)",
+        "ProprietaryClass\\.secretMethod\\([^)]*\\)",
+        "// CONFIDENTIAL:.*$"
+    ],
+    "functions": [
+        "calculate_proprietary_score",
+        "process_internal_data",
+        "apply_secret_transformation"
+    ],
+    "files": [
+        "proprietary_algorithms.py",
+        "secret_sauce/"
+    ]
+}

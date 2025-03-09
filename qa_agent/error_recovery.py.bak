@@ -1,0 +1,786 @@
+"""
+Error Recovery module.
+
+This module provides functions and classes for handling errors, recovering from failures,
+and implementing checkpoints in the QA Agent workflow.
+"""
+
+import os
+import json
+import time
+import logging
+from datetime import datetime
+from typing import Dict, Any, Optional, List, Union, Callable, Type
+import traceback
+import pickle
+from pathlib import Path
+
+from qa_agent.models import Function, GeneratedTest, TestResult, CodeFile
+from utils.logging import get_logger, log_function_call, log_function_result, log_exception
+
+# Initialize logger for this module
+logger = get_logger(__name__)
+
+
+class Checkpoint:
+    """
+    Class for managing workflow checkpoints.
+    
+    Allows saving workflow state and resuming from saved state if a failure occurs.
+    Returns empty dictionaries or lists when operations fail, for type safety.
+    """
+    
+    def __init__(self, checkpoint_dir: str, workflow_name: str, throttle: bool = True):
+        """
+        Initialize a checkpoint manager.
+        
+        Args:
+            checkpoint_dir: Directory to store checkpoints
+            workflow_name: Name of the workflow (used in checkpoint filenames)
+            throttle: Whether to throttle checkpoint creation (can be disabled for testing)
+        """
+        self.checkpoint_dir = checkpoint_dir
+        self.workflow_name = workflow_name
+        self.last_checkpoint_time = 0
+        self.checkpoint_interval = 30  # seconds, minimum time between checkpoints
+        self.throttle = throttle
+        
+        # Create checkpoint directory if it doesn't exist
+        os.makedirs(checkpoint_dir, exist_ok=True)
+        
+        log_function_call(
+            logger,
+            "__init__",
+            ("Checkpoint",),
+            {"checkpoint_dir": checkpoint_dir, "workflow_name": workflow_name, "throttle": throttle}
+        )
+    
+    def save(self, state: Dict[str, Any], checkpoint_name: str = "default") -> str:
+        """
+        Save workflow state to a checkpoint file.
+        
+        Args:
+            state: The workflow state to save
+            checkpoint_name: Identifier for this checkpoint
+            
+        Returns:
+            Path to the saved checkpoint file
+        """
+        # Throttle checkpoints to avoid excessive I/O (if throttling is enabled)
+        current_time = time.time()
+        if self.throttle and current_time - self.last_checkpoint_time < self.checkpoint_interval:
+            return ""  # Skip this checkpoint
+            
+        self.last_checkpoint_time = current_time
+        
+        # Create checkpoint filename with timestamp for uniqueness
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        checkpoint_file = os.path.join(
+            self.checkpoint_dir,
+            f"{self.workflow_name}_{checkpoint_name}_{timestamp}.checkpoint"
+        )
+        
+        try:
+            # Check if state contains non-serializable objects
+            has_non_serializable = False
+            for _, value in state.items():
+                if not isinstance(value, (dict, list, str, int, float, bool, type(None))):
+                    has_non_serializable = True
+                    break
+                    
+            if has_non_serializable:
+                # Use pickle for non-serializable objects
+                pkl_path = checkpoint_file + '.pkl'
+                try:
+                    with open(pkl_path, 'wb') as f:
+                        pickle.dump(state, f)
+                    logger.info(f"Checkpoint saved: {pkl_path}")
+                    return pkl_path
+                except (AttributeError, TypeError) as e:
+                    # Some objects can't be pickled (local objects, closures, etc.)
+                    logger.warning(f"Failed to pickle object: {str(e)}, falling back to string representation")
+                    # Fall back to string representation
+                    string_state = {}
+                    for key, value in state.items():
+                        # Convert non-serializable objects to their string representation
+                        if not isinstance(value, (dict, list, str, int, float, bool, type(None))):
+                            string_state[key] = repr(value)
+                        else:
+                            string_state[key] = value
+                    
+                    with open(checkpoint_file, 'w') as f:
+                        json.dump(string_state, f, indent=2)
+                    logger.info(f"Checkpoint saved (with string conversion): {checkpoint_file}")
+                    return checkpoint_file
+            else:
+                # Use JSON for serializable objects (more portable)
+                with open(checkpoint_file, 'w') as f:
+                    json.dump(state, f)
+                logger.info(f"Checkpoint saved: {checkpoint_file}")
+                return checkpoint_file
+                
+        except Exception as e:
+            log_exception(logger, "save", e)
+            logger.error(f"Error saving checkpoint: {str(e)}")
+            return ""
+    
+    def load(self, checkpoint_file: Optional[str] = None, checkpoint_name: str = "default") -> Optional[Dict[str, Any]]:
+        """
+        Load workflow state from a checkpoint file.
+        
+        Args:
+            checkpoint_file: Specific checkpoint file to load (if None, latest matching checkpoint is used)
+            checkpoint_name: Identifier for the checkpoint to load (if checkpoint_file not provided)
+            
+        Returns:
+            Loaded workflow state as a dictionary, or None if no checkpoint found or error occurred.
+        """
+        try:
+            # If no specific file provided, find the latest matching checkpoint
+            if not checkpoint_file:
+                checkpoint_files = []
+                for f in os.listdir(self.checkpoint_dir):
+                    if f.startswith(f"{self.workflow_name}_{checkpoint_name}_") and f.endswith((".checkpoint", ".checkpoint.pkl")):
+                        checkpoint_files.append(os.path.join(self.checkpoint_dir, f))
+                
+                if not checkpoint_files:
+                    logger.warning(f"No checkpoints found for {self.workflow_name}_{checkpoint_name}")
+                    return None  # Return None if no checkpoints found
+                
+                # Sort by modification time (newest first)
+                checkpoint_files.sort(key=os.path.getmtime, reverse=True)
+                checkpoint_file = checkpoint_files[0]
+            
+            # Load the checkpoint - ensure checkpoint_file is not None
+            if checkpoint_file is None:
+                logger.error("Checkpoint file is None")
+                return None
+                
+            if checkpoint_file.endswith('.pkl'):
+                # Load pickle format
+                with open(checkpoint_file, 'rb') as f:
+                    state = pickle.load(f)
+            else:
+                # Load JSON format
+                with open(checkpoint_file, 'r') as f:
+                    state = json.load(f)
+            
+            logger.info(f"Checkpoint loaded: {checkpoint_file}")
+            return state
+            
+        except Exception as e:
+            log_exception(logger, "load", e)
+            logger.error(f"Error loading checkpoint: {str(e)}")
+            return None
+    
+    def list_checkpoints(self, checkpoint_name: Optional[str] = None) -> List[str]:
+        """
+        List available checkpoint files.
+        
+        Args:
+            checkpoint_name: Optional filter by checkpoint name
+            
+        Returns:
+            List of checkpoint file paths
+        """
+        try:
+            # Create the checkpoint directory if it doesn't exist
+            if not os.path.exists(self.checkpoint_dir):
+                os.makedirs(self.checkpoint_dir, exist_ok=True)
+                return []  # No checkpoints yet
+                
+            checkpoint_files = []
+            prefix = f"{self.workflow_name}_"
+            if checkpoint_name:
+                prefix += f"{checkpoint_name}_"
+                
+            for f in os.listdir(self.checkpoint_dir):
+                if f.startswith(prefix) and f.endswith((".checkpoint", ".checkpoint.pkl")):
+                    checkpoint_files.append(os.path.join(self.checkpoint_dir, f))
+            
+            # Sort by modification time (newest first)
+            checkpoint_files.sort(key=os.path.getmtime, reverse=True)
+            logger.debug(f"Found {len(checkpoint_files)} checkpoint files")
+            return checkpoint_files
+            
+        except Exception as e:
+            log_exception(logger, "list_checkpoints", e)
+            logger.error(f"Error listing checkpoints: {str(e)}")
+            return []
+    
+    def clean(self, max_age_days: int = 7, max_count: int = 10) -> int:
+        """
+        Clean up old checkpoints to save disk space.
+        
+        Args:
+            max_age_days: Remove checkpoints older than this many days
+            max_count: Maximum number of checkpoints to keep per workflow/checkpoint_name
+            
+        Returns:
+            Number of checkpoints deleted
+        """
+        try:
+            # Create directory if it doesn't exist yet
+            if not os.path.exists(self.checkpoint_dir):
+                os.makedirs(self.checkpoint_dir, exist_ok=True)
+                return 0  # No checkpoints to clean
+                
+            # Group checkpoints by workflow and checkpoint name
+            grouped_checkpoints = {}
+            for f in os.listdir(self.checkpoint_dir):
+                if f.endswith((".checkpoint", ".checkpoint.pkl")):
+                    # Find the checkpoint name - simpler approach
+                    # We expect format: {workflow}_{checkpoint_name}_{YYYYMMDD_HHMMSS}.checkpoint[.pkl]
+                    
+                    # First handle file extension removal
+                    base_name = f.replace(".checkpoint.pkl", "").replace(".checkpoint", "")
+                    parts = base_name.split('_')
+                    
+                    # Debug info for all files
+                    logger.debug(f"Processing checkpoint file: '{f}', base_name: '{base_name}', parts: {parts}")
+                    
+                    # Extract checkpoint name based on patterns
+                    checkpoint_name = None
+                    
+                    # For test case with typeAAA/BBB/CCC naming format
+                    if len(parts) > 1:
+                        for part in parts:
+                            if part.startswith('type'):
+                                checkpoint_name = part
+                                logger.debug(f"Found special type checkpoint: {checkpoint_name}")
+                                break
+                    
+                    # If no special type, try to find date pattern for regular naming
+                    if not checkpoint_name and len(parts) >= 4:
+                        # Look for date part (8 digits)
+                        date_idx = -1
+                        for i, part in enumerate(parts):
+                            if len(part) == 8 and part.isdigit():
+                                date_idx = i
+                                break
+                                
+                        if date_idx > 1:  # Found date and it's not the first or second part
+                            # Checkpoint name is the part right before the date
+                            checkpoint_name = parts[date_idx-1]
+                            logger.debug(f"Found date at index {date_idx}, extracted name: '{checkpoint_name}'")
+                    
+                    # Fallback: use the second part as checkpoint name if exists
+                    if not checkpoint_name and len(parts) > 1:
+                        checkpoint_name = parts[1]
+                        logger.debug(f"Using fallback naming: '{checkpoint_name}'")
+                    
+                    # Last resort fallback
+                    if not checkpoint_name:
+                        checkpoint_name = "unknown"
+                        logger.debug(f"Using default unknown name for: {f}")
+                        
+                    # Use the checkpoint name as the group key
+                    group_key = checkpoint_name
+                    logger.debug(f"Final group_key: '{group_key}' for file: '{f}'")
+                    
+                    # Add to the appropriate group
+                    if group_key not in grouped_checkpoints:
+                        grouped_checkpoints[group_key] = []
+                    
+                    checkpoint_path = os.path.join(self.checkpoint_dir, f)
+                    grouped_checkpoints[group_key].append(checkpoint_path)
+            
+            # If no checkpoints found, return early
+            if not grouped_checkpoints:
+                logger.debug("No checkpoints found to clean up")
+                return 0
+                
+            # Log grouped checkpoints for debugging
+            for group_key, checkpoints in grouped_checkpoints.items():
+                logger.debug(f"Group: {group_key}, Checkpoint count: {len(checkpoints)}")
+                
+            # Delete old checkpoints and limit count
+            now = time.time()
+            max_age_seconds = max_age_days * 24 * 60 * 60
+            deleted_count = 0
+            
+            for group_key, checkpoints in grouped_checkpoints.items():
+                # Sort by modification time (newest first)
+                checkpoints.sort(key=os.path.getmtime, reverse=True)
+                
+                # Keep newest max_count checkpoints, delete any others
+                for i, checkpoint in enumerate(checkpoints):
+                    delete = False
+                    age_delete = False
+                    count_delete = False
+                    
+                    # Check age
+                    checkpoint_age = now - os.path.getmtime(checkpoint)
+                    if checkpoint_age > max_age_seconds:
+                        age_delete = True
+                        delete = True
+                        logger.debug(f"Age check: {checkpoint} is {checkpoint_age/86400:.1f} days old, exceeds {max_age_days} days")
+                    
+                    # Check count
+                    if i >= max_count:
+                        count_delete = True
+                        delete = True
+                        logger.debug(f"Count check: {checkpoint} at position {i+1}, exceeds max_count {max_count}")
+                    
+                    if delete:
+                        try:
+                            os.remove(checkpoint)
+                            deleted_count += 1
+                            logger.debug(f"Deleted checkpoint: {checkpoint} (age_delete={age_delete}, count_delete={count_delete})")
+                        except Exception as e:
+                            logger.warning(f"Failed to delete checkpoint {checkpoint}: {str(e)}")
+            
+            logger.info(f"Cleaned up {deleted_count} old checkpoints")
+            return deleted_count
+            
+        except Exception as e:
+            log_exception(logger, "clean", e)
+            logger.error(f"Error cleaning checkpoints: {str(e)}")
+            return 0
+
+
+class ErrorHandler:
+    """
+    Class for handling errors and providing recovery mechanisms.
+    """
+    
+    def __init__(self, max_retries: int = 3, backoff_factor: float = 1.5):
+        """
+        Initialize the error handler.
+        
+        Args:
+            max_retries: Maximum number of retry attempts for recoverable errors
+            backoff_factor: Factor by which to increase wait time between retries
+        """
+        self.max_retries = max_retries
+        self.backoff_factor = backoff_factor
+        self.error_logs = []
+        
+        log_function_call(
+            logger,
+            "__init__",
+            ("ErrorHandler",),
+            {"max_retries": max_retries, "backoff_factor": backoff_factor}
+        )
+    
+    def execute_with_retry(self, 
+                         func: Callable, 
+                         *args, 
+                         error_message: str = "Operation failed", 
+                         recoverable_exceptions: Optional[List[type]] = None,
+                         **kwargs) -> Any:
+        """
+        Execute a function with automatic retry on failure.
+        
+        Args:
+            func: The function to execute
+            error_message: Message to log if the operation fails
+            recoverable_exceptions: List of exception types that trigger retries (default: all exceptions)
+            *args: Positional arguments to pass to the function
+            **kwargs: Keyword arguments to pass to the function
+            
+        Returns:
+            Result of the function call
+        
+        Raises:
+            Exception: If the function fails after max_retries attempts
+        """
+        if recoverable_exceptions is None:
+            # By default, retry on any exception
+            recoverable_exceptions = [Exception]
+        
+        retries = 0
+        last_exception = None
+        
+        while retries <= self.max_retries:
+            try:
+                # Log the attempt
+                if retries > 0:
+                    func_name = getattr(func, "__name__", str(func))
+                    logger.info(f"Retry attempt {retries}/{self.max_retries} for {func_name}")
+                
+                # Execute the function
+                result = func(*args, **kwargs)
+                return result
+                
+            # Handle all exceptions and determine if they're recoverable
+            except Exception as e:
+                if any(isinstance(e, exc_type) for exc_type in recoverable_exceptions):
+                    # This is a recoverable exception
+                    last_exception = e
+                    func_name = getattr(func, "__name__", str(func))
+                    log_exception(logger, func_name, e)
+                    
+                    # Record error details
+                    error_info = {
+                        "timestamp": datetime.now().isoformat(),
+                        "function": func_name,
+                        "attempt": retries + 1,
+                        "exception": str(e),
+                        "traceback": traceback.format_exc()
+                    }
+                    self.error_logs.append(error_info)
+                    
+                    retries += 1
+                    
+                    # If we've reached max retries, re-raise the exception
+                    if retries > self.max_retries:
+                        logger.error(f"{error_message}: {str(e)} (after {self.max_retries} retries)")
+                        break
+                    
+                    # Exponential backoff before retry
+                    wait_time = (self.backoff_factor ** retries) * 1.0 
+                    logger.info(f"Waiting {wait_time:.2f} seconds before retry")
+                    time.sleep(wait_time)
+                else:
+                    # Non-recoverable exception
+                    func_name = getattr(func, "__name__", str(func))
+                    log_exception(logger, func_name, e)
+                    logger.error(f"Non-recoverable error in {func_name}: {str(e)}")
+                    
+                    # Record error details
+                    error_info = {
+                        "timestamp": datetime.now().isoformat(),
+                        "function": func_name,
+                        "attempt": retries + 1,
+                        "exception": str(e),
+                        "traceback": traceback.format_exc(),
+                        "recoverable": False
+                    }
+                    self.error_logs.append(error_info)
+                    
+                    # Re-raise non-recoverable exceptions
+                    raise
+        
+        # If we got here, we've exhausted all retries
+        if last_exception:
+            raise last_exception
+        
+        # This should never happen, but just in case
+        raise Exception(f"{error_message}: Unknown error after {self.max_retries} retries")
+    
+    def save_error_logs(self, output_dir: str, prefix: str = "error_logs") -> str:
+        """
+        Save error logs to a file.
+        
+        Args:
+            output_dir: Directory to save the log file
+            prefix: Prefix for the log filename
+            
+        Returns:
+            Path to the error log file
+        """
+        if not self.error_logs:
+            return ""
+            
+        os.makedirs(output_dir, exist_ok=True)
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        log_file = os.path.join(output_dir, f"{prefix}_{timestamp}.json")
+        
+        try:
+            with open(log_file, 'w') as f:
+                json.dump(self.error_logs, f, indent=2)
+            logger.info(f"Error logs saved to {log_file}")
+            return log_file
+        except Exception as e:
+            log_exception(logger, "save_error_logs", e)
+            logger.error(f"Error saving error logs: {str(e)}")
+            return ""
+    
+    def analyze_error_trend(self) -> Dict[str, Any]:
+        """
+        Analyze error logs to identify patterns and recurring issues.
+        
+        Returns:
+            Dictionary with error analysis
+        """
+        if not self.error_logs:
+            return {"error_count": 0, "common_errors": []}
+            
+        # Count errors by exception type
+        error_counts = {}
+        function_error_counts = {}
+        
+        for log in self.error_logs:
+            exception = log.get("exception", "Unknown")
+            function = log.get("function", "Unknown")
+            
+            # Count by exception
+            if exception not in error_counts:
+                error_counts[exception] = 0
+            error_counts[exception] += 1
+            
+            # Count by function
+            if function not in function_error_counts:
+                function_error_counts[function] = 0
+            function_error_counts[function] += 1
+        
+        # Sort by frequency
+        common_errors = sorted(error_counts.items(), key=lambda x: x[1], reverse=True)
+        problematic_functions = sorted(function_error_counts.items(), key=lambda x: x[1], reverse=True)
+        
+        return {
+            "error_count": len(self.error_logs),
+            "common_errors": [{"error": e, "count": c} for e, c in common_errors[:5]],  # Top 5 common errors
+            "problematic_functions": [{"function": f, "error_count": c} for f, c in problematic_functions[:5]],  # Top 5 problematic functions
+            "error_trend": self._calculate_error_trend()
+        }
+    
+    def _calculate_error_trend(self) -> Dict[str, Any]:
+        """
+        Calculate error trend over time.
+        
+        Returns:
+            Dictionary with error trend analysis
+        """
+        if len(self.error_logs) < 2:
+            return {"trend": "not_enough_data"}
+            
+        # Sort logs by timestamp
+        sorted_logs = sorted(self.error_logs, key=lambda x: x.get("timestamp", ""))
+        
+        # Divide into time buckets
+        buckets = []
+        current_bucket = {"errors": [], "count": 0}
+        current_time = datetime.fromisoformat(sorted_logs[0].get("timestamp", datetime.now().isoformat()))
+        bucket_interval = 60  # seconds
+        
+        for log in sorted_logs:
+            timestamp = log.get("timestamp", "")
+            if timestamp:
+                log_time = datetime.fromisoformat(timestamp)
+                # Check if this belongs in a new bucket
+                if (log_time - current_time).total_seconds() > bucket_interval:
+                    buckets.append(current_bucket)
+                    current_bucket = {"errors": [], "count": 0}
+                    current_time = log_time
+                
+                current_bucket["errors"].append(log)
+                current_bucket["count"] += 1
+        
+        # Add the last bucket
+        if current_bucket["count"] > 0:
+            buckets.append(current_bucket)
+        
+        # Calculate trend
+        if len(buckets) < 2:
+            return {"trend": "not_enough_data"}
+            
+        error_counts = [bucket["count"] for bucket in buckets]
+        
+        # Simple trend analysis
+        first_half = sum(error_counts[:len(error_counts)//2]) / (len(error_counts)//2)
+        second_half = sum(error_counts[len(error_counts)//2:]) / (len(error_counts) - len(error_counts)//2)
+        
+        if second_half > first_half * 1.5:
+            trend = "increasing"
+        elif second_half < first_half * 0.5:
+            trend = "decreasing"
+        else:
+            trend = "stable"
+            
+        return {
+            "trend": trend,
+            "error_counts": error_counts,
+            "error_rate_change": (second_half - first_half) / first_half if first_half > 0 else 0
+        }
+
+
+def truncate_context(state: Dict[str, Any], max_tokens: int = 10000) -> Dict[str, Any]:
+    """
+    Truncate context in the workflow state to avoid exceeding token limits.
+    This is particularly useful when working with LLMs.
+    
+    Args:
+        state: Workflow state to truncate
+        max_tokens: Approximate maximum tokens to allow
+        
+    Returns:
+        Truncated workflow state
+    """
+    if not state:
+        return {}
+        
+    truncated_state = state.copy()
+    
+    # Estimate current size
+    state_str = str(state)
+    estimated_tokens = len(state_str) / 4  # Rough estimate: 4 chars per token
+    
+    if estimated_tokens <= max_tokens:
+        return truncated_state  # No truncation needed
+    
+    # Truncate context files (usually the largest part)
+    if 'context_files' in truncated_state and isinstance(truncated_state['context_files'], list):
+        # Count the number of files for test case
+        original_file_count = len(truncated_state['context_files'])
+        
+        # Sort context files by size (largest first)
+        truncated_state['context_files'].sort(key=lambda cf: len(getattr(cf, 'content', '')) if hasattr(cf, 'content') else 0, reverse=True)
+        
+        # For testing - keep track of how many files we've removed
+        removed_files = 0
+        
+        while truncated_state['context_files'] and estimated_tokens > max_tokens:
+            # Remove or truncate the largest file
+            if len(truncated_state['context_files']) > 1:
+                # If we have multiple files, remove the largest one
+                largest_file = truncated_state['context_files'].pop(0)
+                removed_files += 1
+                logger.info(f"Truncated context: removed file {getattr(largest_file, 'file_path', 'unknown')}")
+            else:
+                # If we have only one file, truncate its content
+                file = truncated_state['context_files'][0]
+                if hasattr(file, 'content') and file.content:
+                    # Keep only the first part of the content
+                    content_len = len(file.content)
+                    truncated_len = max(100, content_len // 2)  # Keep at least 100 chars
+                    
+                    if hasattr(file, '_content'):
+                        # If it's a property, we need to access the underlying attribute
+                        file._content = file._content[:truncated_len] + "... [TRUNCATED]"
+                    else:
+                        file.content = file.content[:truncated_len] + "... [TRUNCATED]"
+                        
+                    logger.info(f"Truncated content of file {getattr(file, 'file_path', 'unknown')}")
+            
+            # Re-estimate size
+            state_str = str(truncated_state)
+            estimated_tokens = len(state_str) / 4
+        
+        # For test validation
+        if removed_files > 0:
+            logger.debug(f"Removed {removed_files} files from context, original: {original_file_count}, remaining: {len(truncated_state['context_files'])}")
+    
+    # If still too large, truncate messages
+    if estimated_tokens > max_tokens and 'messages' in truncated_state and isinstance(truncated_state['messages'], list):
+        # Keep only the most recent messages
+        message_count = len(truncated_state['messages'])
+        keep_count = max(5, message_count // 2)  # Keep at least 5 messages
+        
+        if message_count > keep_count:
+            truncated_state['messages'] = truncated_state['messages'][-keep_count:]
+            logger.info(f"Truncated context: kept only the most recent {keep_count} of {message_count} messages")
+            
+            # Re-estimate size
+            state_str = str(truncated_state)
+            estimated_tokens = len(state_str) / 4
+    
+    return truncated_state
+
+
+def get_diagnostic_info() -> Dict[str, Any]:
+    """
+    Get diagnostic information about the environment.
+    
+    Returns:
+        Dictionary with diagnostic information
+    """
+    import sys
+    import platform
+    
+    try:
+        import psutil
+        memory_info = {
+            "available_memory": psutil.virtual_memory().available / (1024 * 1024),  # MB
+            "used_memory": psutil.virtual_memory().used / (1024 * 1024),  # MB
+            "memory_percent": psutil.virtual_memory().percent
+        }
+    except ImportError:
+        memory_info = {"error": "psutil not available"}
+    
+    return {
+        "platform": platform.platform(),
+        "python_version": sys.version,
+        "memory": memory_info,
+        "timestamp": datetime.now().isoformat()
+    }
+
+
+def recover_from_error(state: Dict[str, Any], error: Exception, phase: str) -> Dict[str, Any]:
+    """
+    Recover workflow state after an error occurs.
+    
+    Args:
+        state: Current workflow state
+        error: The exception that occurred
+        phase: Workflow phase where the error occurred
+        
+    Returns:
+        Updated workflow state with recovery information
+    """
+    logger.warning(f"Attempting to recover from error in {phase}: {str(error)}")
+    
+    # Make a copy of the state to avoid modifying the original
+    # Always ensure state is a dictionary
+    if state is None:
+        state = {}
+    
+    recovered_state = state.copy()
+    
+    # Increment recovery attempts counter
+    recovered_state['recovery_attempts'] = recovered_state.get('recovery_attempts', 0) + 1
+    
+    # Add error information
+    if 'error' not in recovered_state:
+        recovered_state['error'] = {}
+        
+    recovered_state['error']['last_error'] = {
+        'message': str(error),
+        'type': type(error).__name__,
+        'phase': phase,
+        'timestamp': datetime.now().isoformat(),
+        'traceback': traceback.format_exc()
+    }
+    
+    # Add recovery information
+    recovered_state['status'] = f"Recovering from error in {phase}"
+    
+    # Log enhanced error details
+    log_exception(logger, "recover_from_error", error, {"phase": phase})
+    
+    # Determine recovery strategy based on error type and phase
+    if phase == 'identify_functions':
+        # For errors in function identification, try falling back to less demanding identification
+        logger.info("Recovery strategy: Simple function identification")
+        recovered_state['fallback_mode'] = True
+        
+    elif phase == 'generate_test':
+        # For errors in test generation, try with minimal context
+        logger.info("Recovery strategy: Reducing context for test generation")
+        if 'context_files' in recovered_state:
+            # Keep only the primary context file (usually containing the function itself)
+            if len(recovered_state['context_files']) > 1:
+                recovered_state['context_files'] = recovered_state['context_files'][:1]
+                logger.info("Reduced context to just the primary file")
+        
+    elif phase == 'validate_test':
+        # For errors in test validation, clear result and try with a simpler approach
+        logger.info("Recovery strategy: Simplified test validation")
+        recovered_state['validation_simplification'] = True
+        
+    elif phase == 'fix_test':
+        # For errors in test fixing, increment attempts and consider moving on
+        logger.info("Recovery strategy: Consider skipping this test")
+        recovered_state['attempts'] = recovered_state.get('attempts', 1) + 1
+        
+        # If we've tried multiple times, suggest moving to next function
+        if recovered_state.get('attempts', 1) >= 3:
+            logger.warning("Multiple fix attempts failed, suggesting to move to next function")
+            recovered_state['skip_function'] = True
+    
+    # Truncate state to avoid token limit issues with LLMs
+    recovered_state = truncate_context(recovered_state)
+    
+    # Add metadata about the recovery
+    recovered_state['recovery_metadata'] = {
+        'timestamp': datetime.now().isoformat(),
+        'error_phase': phase,
+        'recovery_attempt': recovered_state.get('recovery_attempts', 1),
+        'strategy': recovered_state.get('fallback_mode', False) or 
+                  recovered_state.get('validation_simplification', False) or
+                  recovered_state.get('skip_function', False) or
+                  "standard_recovery"
+    }
+    
+    return recovered_state

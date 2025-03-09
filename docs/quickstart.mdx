@@ -1,0 +1,67 @@
+# Quickstart Guide
+
+Get up and running with QA Agent in minutes. This guide will help you install, configure, and run your first test generation session.
+
+## Prerequisites
+
+- Python 3.9 or higher
+- Git (for repository access and incremental testing)
+- An OpenAI API key (or Anthropic/GitHub Copilot key for alternative AI providers)
+
+## 5-Minute Quickstart
+
+### Install QA Agent
+
+```bash
+# Create a virtual environment (recommended)
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+
+# Install from PyPI
+pip install qa-agent
+```
+
+### Set API Key
+
+```bash
+# Set your API key as an environment variable
+export OPENAI_API_KEY="your-api-key-here"  # On Windows: set OPENAI_API_KEY=your-api-key-here
+```
+
+### Run QA Agent on Your Project
+
+```bash
+# Run QA Agent on your repository
+qa-agent --repo-path /path/to/your/project
+```
+
+That's it! QA Agent will:
+1. Analyse your codebase
+2. Identify functions that need tests
+3. Generate appropriate unit tests
+4. Validate the tests
+5. Save results to the `./generated_tests` directory
+
+## Next Steps
+
+- [Configure](/configuration) QA Agent for your specific needs
+- Learn how to [run QA Agent with parallel processing](/running#parallel-processing)
+- Set up [incremental testing](/running#incremental-testing) for faster runs
+- Check out the [CLI reference](/cli) for all available options
+
+## Sample Output
+
+When QA Agent runs successfully, you'll see output like this:
+
+```
+QA Agent Summary
+==================================================
+Total functions processed: 42
+Tests generated successfully: 39
+Tests failed: 3
+Success rate: 92.86%
+Output directory: ./generated_tests
+==================================================
+```
+
+Tests are generated in your specified output directory, organised by module structure similar to your source code.

@@ -1,0 +1,113 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  code-quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+          
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install flake8 black isort mypy
+          pip install -e .
+          
+      - name: Check code formatting with Black
+        run: black --check qa_agent utils tests
+        
+      - name: Check imports with isort
+        run: isort --check-only --profile black qa_agent utils tests
+        
+      - name: Lint with flake8
+        run: flake8 qa_agent utils tests
+        
+      - name: Type check with mypy
+        run: mypy --no-incremental qa_agent utils tests
+
+  tests:
+    runs-on: ubuntu-latest
+    needs: code-quality
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+          
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+          pip install pytest pytest-cov
+          
+      - name: Run tests with coverage
+        run: pytest --cov=qa_agent --cov=utils tests/
+        
+      - name: Generate coverage report
+        run: |
+          pytest --cov=qa_agent --cov=utils --cov-report=xml tests/
+          
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          file: ./coverage.xml
+          fail_ci_if_error: true
+
+  security-scan:
+    runs-on: ubuntu-latest
+    needs: tests
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+          
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pip-audit
+          
+      - name: Python Dependency Scan
+        run: pip-audit -f json -o security-audit.json
+
+  version-bump:
+    runs-on: ubuntu-latest
+    needs: [tests, security-scan]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+          
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install python-semantic-release
+          
+      - name: Semantic Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          semantic-release publish

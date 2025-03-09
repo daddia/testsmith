@@ -1,0 +1,128 @@
+# Configuration Guide
+
+QA Agent can be configured using YAML configuration files or command-line options. This guide covers all available configuration options.
+
+## Using Configuration Files
+
+Create a YAML file with your configuration settings:
+
+```yaml
+# qa_config.yaml
+repo_path: "/path/to/your/project"
+model_provider: "openai"
+model_name: "gpt-4o"
+output_directory: "./generated_tests"
+target_coverage: 80.0
+
+parallel_execution: true
+max_workers: 4
+incremental_testing: true
+changed_since_days: 7
+
+ip_protection_enabled: false
+test_framework: "pytest"
+
+sourcegraph_enabled: false
+```
+
+Then run QA Agent with this config:
+
+```bash
+qa-agent --config ./qa_config.yaml
+```
+
+## Configuration Options
+
+### Core Settings
+
+| Option | Description | Default |
+| ------ | ----------- | ------- |
+| `repo_path` | Path to the repository | Required |
+| `output_directory` | Directory for generated tests | `./generated_tests` |
+| `target_coverage` | Target coverage percentage | 80.0 |
+| `verbose` | Enable verbose logging | False |
+
+### AI Provider Settings
+
+| Option | Description | Default |
+| ------ | ----------- | ------- |
+| `model_provider` | AI provider ("openai", "anthropic", "github-copilot") | `openai` |
+| `model_name` | Model name to use | `gpt-4o` |
+| `api_key` | API key (prefer environment variables over config files) | None |
+| `copilot_settings` | Settings specific to GitHub Copilot | None |
+
+### Parallel Processing Settings
+
+| Option | Description | Default |
+| ------ | ----------- | ------- |
+| `parallel_execution` | Enable parallel processing | False |
+| `max_workers` | Maximum number of worker threads/processes | 4 |
+| `task_queue_size` | Size of the task queue for parallel processing | 100 |
+| `incremental_testing` | Only test files that have changed recently | False |
+| `changed_since_days` | Only test files changed in the last N days | 7 |
+
+### Test Framework Settings
+
+| Option | Description | Default |
+| ------ | ----------- | ------- |
+| `test_framework` | Test framework to use ("pytest", "unittest") | `pytest` |
+| `test_directory` | Base directory for tests | `tests` |
+| `test_file_pattern` | Pattern for test file names | `test_*.py` |
+
+### IP Protection Settings
+
+| Option | Description | Default |
+| ------ | ----------- | ------- |
+| `ip_protection_enabled` | Enable IP protection | False |
+| `protected_patterns` | Regex patterns to redact | None |
+| `protected_functions` | List of function names to redact | None |
+| `protected_files` | List of file paths to completely redact | None |
+| `ip_protection_rules_path` | Path to JSON rules file | None |
+
+### Sourcegraph Integration
+
+| Option | Description | Default |
+| ------ | ----------- | ------- |
+| `sourcegraph_enabled` | Enable Sourcegraph integration | False |
+| `sourcegraph_api_endpoint` | Sourcegraph API endpoint | `https://sourcegraph.com/.api` |
+| `sourcegraph_api_token` | Sourcegraph API token | None |
+
+## IP Protection Rules File
+
+When using IP protection, you can create a JSON file with detailed rules:
+
+```json
+{
+  "protected_patterns": [
+    "SECRET_[A-Z0-9_]+",
+    "API_KEY_[A-Z0-9]+"
+  ],
+  "protected_functions": [
+    "calculate_pricing",
+    "encrypt_user_data"
+  ],
+  "protected_files": [
+    "billing/pricing.py",
+    "security/encryption.py"
+  ]
+}
+```
+
+## Environment Variables vs. Configuration
+
+For sensitive information like API keys, environment variables are preferred over configuration files:
+
+| Config Value | Environment Variable |
+| ------------ | -------------------- |
+| `api_key` (OpenAI) | `OPENAI_API_KEY` |
+| `api_key` (Anthropic) | `ANTHROPIC_API_KEY` |
+| `api_key` (GitHub Copilot) | `GITHUB_COPILOT_API_KEY` |
+| `sourcegraph_api_token` | `SOURCEGRAPH_API_TOKEN` |
+
+## Configuration Priority
+
+When options are specified in multiple places, the priority is:
+1. Command-line arguments (highest priority)
+2. Configuration file
+3. Environment variables
+4. Default values (lowest priority)

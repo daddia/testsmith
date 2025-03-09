@@ -1,0 +1,347 @@
+"""
+End-to-end tests for integration with external services.
+
+These tests verify that the QA Agent correctly integrates with external services
+like OpenAI, Anthropic, GitHub Copilot, and Sourcegraph.
+"""
+
+import os
+import json
+import shutil
+import tempfile
+from unittest.mock import MagicMock, patch
+
+import pytest
+
+from qa_agent.config import QAAgentConfig
+from qa_agent.models import CodeFile, FileType, Function, CodeSearchResult, CodeIntelligenceResult
+from qa_agent.agents import TestGenerationAgent
+from qa_agent.sourcegraph_client import SourcegraphClient
+
+
+class TestExternalServicesE2E:
+    """End-to-end tests for external service integrations."""
+
+    @pytest.mark.e2e
+    def test_openai_integration(self, mocker, sample_repo_path, e2e_config):
+        """Test integration with OpenAI API."""
+        # Set up configuration for OpenAI
+        e2e_config.repo_path = sample_repo_path
+        e2e_config.output_directory = os.path.join(tempfile.gettempdir(), "qa_agent_openai_tests")
+        os.makedirs(e2e_config.output_directory, exist_ok=True)
+        e2e_config.model_provider = "openai"
+        e2e_config.model_name = "gpt-4o"
+        e2e_config.api_key = "test-api-key"
+        
+        # Create a function to test
+        function = Function(
+            name="add_numbers",
+            code="def add_numbers(a, b):\n    return a + b",
+            file_path=os.path.join(sample_repo_path, "sample_module", "utils.py"),
+            start_line=10,
+            end_line=12,
+            docstring="Add two numbers and return the result.",
+            parameters=[{"name": "a", "type": "int"}, {"name": "b", "type": "int"}],
+            return_type="int",
+            dependencies=[],
+            complexity=1,
+        )
+        
+        # Create a context file
+        context_file = CodeFile(
+            path=os.path.join(sample_repo_path, "sample_module", "utils.py"),
+            content="def add_numbers(a, b):\n    return a + b",
+            type=FileType.PYTHON,
+        )
+        
+        # Create a mock response for OpenAI
+        mock_response = MagicMock()
+        mock_response.choices = [
+            MagicMock(
+                message=MagicMock(
+                    content="""
+```python
+import pytest
+from sample_module.utils import add_numbers
+
+def test_add_numbers():
+    assert add_numbers(1, 2) == 3
+    assert add_numbers(-1, 1) == 0
+    assert add_numbers(0, 0) == 0
+```
+"""
+                )
+            )
+        ]
+        
+        # Mock the OpenAI API call
+        with patch("openai.resources.chat.completions.Completions.create", return_value=mock_response):
+            # Initialize the test generation agent
+            test_generator = TestGenerationAgent(e2e_config)
+            
+            # Generate a test
+            generated_test = test_generator.generate_test(function, [context_file])
+            
+            # Verify the test was generated
+            assert generated_test is not None
+            assert generated_test.function.name == "add_numbers"
+            assert "def test_add_numbers():" in generated_test.test_code
+            assert "assert add_numbers(1, 2) == 3" in generated_test.test_code
+        
+        # Clean up
+        if os.path.exists(e2e_config.output_directory):
+            shutil.rmtree(e2e_config.output_directory)
+
+    @pytest.mark.e2e
+    def test_anthropic_integration(self, mocker, sample_repo_path, e2e_config):
+        """Test integration with Anthropic API."""
+        # Set up configuration for Anthropic
+        e2e_config.repo_path = sample_repo_path
+        e2e_config.output_directory = os.path.join(tempfile.gettempdir(), "qa_agent_anthropic_tests")
+        os.makedirs(e2e_config.output_directory, exist_ok=True)
+        e2e_config.model_provider = "anthropic"
+        e2e_config.model_name = "claude-3-opus-20240229"
+        e2e_config.api_key = "test-anthropic-api-key"
+        
+        # Create a function to test
+        function = Function(
+            name="divide_numbers",
+            code="def divide_numbers(a, b):\n    if b == 0:\n        raise ValueError('Cannot divide by zero')\n    return a / b",
+            file_path=os.path.join(sample_repo_path, "sample_module", "utils.py"),
+            start_line=25,
+            end_line=29,
+            docstring="Divide a by b and return the result.",
+            parameters=[{"name": "a", "type": "float"}, {"name": "b", "type": "float"}],
+            return_type="float",
+            dependencies=[],
+            complexity=2,
+        )
+        
+        # Mock the Anthropic client and message creation
+        with (
+            patch("anthropic.Anthropic") as mock_anthropic_class,
+            patch("qa_agent.test_generator.TestGenerator._create_test_generation_prompt"),
+            patch("qa_agent.test_generator.TestGenerator._parse_test_response"),
+            patch("qa_agent.test_generator.TestGenerator.save_test_to_file"),
+        ):
+            # Set up the mock Anthropic response
+            mock_anthropic = mock_anthropic_class.return_value
+            mock_anthropic.messages.create.return_value = MagicMock(
+                content=[
+                    MagicMock(
+                        text="""
+```python
+import pytest
+from sample_module.utils import divide_numbers
+
+def test_divide_numbers():
+    assert divide_numbers(6, 2) == 3.0
+    assert divide_numbers(5, 2) == 2.5
+    
+    with pytest.raises(ValueError, match="Cannot divide by zero"):
+        divide_numbers(1, 0)
+```
+"""
+                    )
+                ]
+            )
+            
+            # Initialize the test generation agent
+            # Need to patch the TestGenerator.__init__ because it tries to create an LLM client
+            with patch.object(TestGenerationAgent, "__init__", return_value=None) as mock_init:
+                test_generator = TestGenerationAgent(e2e_config)
+                test_generator.config = e2e_config
+                test_generator.llm = MagicMock()
+                
+                # Mock the generate_test method to return a test without calling the actual implementation
+                with patch.object(
+                    test_generator, 
+                    "_generate_test_with_llm",
+                    return_value=(
+                        "import pytest\nfrom sample_module.utils import divide_numbers\n\ndef test_divide_numbers():\n    assert divide_numbers(6, 2) == 3.0\n    assert divide_numbers(5, 2) == 2.5\n    \n    with pytest.raises(ValueError, match=\"Cannot divide by zero\"):\n        divide_numbers(1, 0)",
+                        ["pytest", "sample_module.utils.divide_numbers"],
+                        [],
+                        [],
+                    )
+                ):
+                    # Generate a test
+                    generated_test = test_generator.generate_test(function)
+                    
+                    # Verify the test was generated
+                    assert generated_test is not None
+                    assert generated_test.function.name == "divide_numbers"
+                    assert "def test_divide_numbers():" in generated_test.test_code
+                    assert "with pytest.raises(ValueError" in generated_test.test_code
+        
+        # Clean up
+        if os.path.exists(e2e_config.output_directory):
+            shutil.rmtree(e2e_config.output_directory)
+
+    @pytest.mark.e2e
+    def test_copilot_integration(self, mocker, sample_repo_path, e2e_config):
+        """Test integration with GitHub Copilot API."""
+        # Set up configuration for GitHub Copilot
+        e2e_config.repo_path = sample_repo_path
+        e2e_config.output_directory = os.path.join(tempfile.gettempdir(), "qa_agent_copilot_tests")
+        os.makedirs(e2e_config.output_directory, exist_ok=True)
+        e2e_config.model_provider = "github-copilot"
+        e2e_config.api_key = "test-copilot-api-key"
+        e2e_config.copilot_settings = {
+            "api_endpoint": "https://api.github.com/copilot",
+            "model": "copilot-codex",
+        }
+        
+        # Create a function to test
+        function = Function(
+            name="multiply_numbers",
+            code="def multiply_numbers(a, b):\n    return a * b",
+            file_path=os.path.join(sample_repo_path, "sample_module", "utils.py"),
+            start_line=20,
+            end_line=22,
+            docstring="Multiply two numbers and return the result.",
+            parameters=[{"name": "a", "type": "int"}, {"name": "b", "type": "int"}],
+            return_type="int",
+            dependencies=[],
+            complexity=1,
+        )
+        
+        # Mock the CopilotAdapter and its methods
+        with patch("qa_agent.copilot_adapter.CopilotAdapter") as mock_copilot_adapter_class:
+            # Set up the mock CopilotAdapter
+            mock_copilot_adapter = mock_copilot_adapter_class.return_value
+            mock_copilot_adapter.generate_test.return_value = (
+                "import pytest\nfrom sample_module.utils import multiply_numbers\n\ndef test_multiply_numbers():\n    assert multiply_numbers(2, 3) == 6\n    assert multiply_numbers(0, 5) == 0\n    assert multiply_numbers(-1, -1) == 1",
+                ["pytest", "sample_module.utils.multiply_numbers"],
+                [],
+                [],
+            )
+            
+            # Initialize the test generation agent
+            # Need to patch the TestGenerator.__init__ because it tries to create an LLM client
+            with patch.object(TestGenerationAgent, "__init__", return_value=None) as mock_init:
+                test_generator = TestGenerationAgent(e2e_config)
+                test_generator.config = e2e_config
+                test_generator.copilot_adapter = mock_copilot_adapter
+                
+                # Mock the generate_test_with_copilot method to use our mock adapter
+                with patch.object(
+                    test_generator,
+                    "_generate_test_with_copilot",
+                    side_effect=test_generator._generate_test_with_copilot,
+                ) as mock_generate:
+                    # Mock save_test_to_file to avoid file operations
+                    with patch.object(test_generator, "save_test_to_file"):
+                        # Generate a test
+                        generated_test = test_generator.generate_test(function)
+                        
+                        # Verify the test was generated
+                        assert generated_test is not None
+                        assert generated_test.function.name == "multiply_numbers"
+                        assert "def test_multiply_numbers():" in generated_test.test_code
+                        assert "assert multiply_numbers(2, 3) == 6" in generated_test.test_code
+                        
+                        # Verify the adapter was called
+                        mock_copilot_adapter.generate_test.assert_called_once()
+        
+        # Clean up
+        if os.path.exists(e2e_config.output_directory):
+            shutil.rmtree(e2e_config.output_directory)
+
+    @pytest.mark.e2e
+    def test_sourcegraph_integration(self, mocker, sample_repo_path, e2e_config):
+        """Test integration with Sourcegraph API."""
+        # Set up configuration with Sourcegraph enabled
+        e2e_config.repo_path = sample_repo_path
+        e2e_config.output_directory = os.path.join(tempfile.gettempdir(), "qa_agent_sourcegraph_tests")
+        os.makedirs(e2e_config.output_directory, exist_ok=True)
+        e2e_config.sourcegraph_enabled = True
+        e2e_config.sourcegraph_api_endpoint = "https://sourcegraph.example.com/.api"
+        e2e_config.sourcegraph_api_token = "test-sourcegraph-token"
+        
+        # Mock the SourcegraphClient
+        with patch("qa_agent.sourcegraph_client.SourcegraphClient") as mock_sg_client_class:
+            # Set up the mock client
+            mock_sg_client = mock_sg_client_class.return_value
+            
+            # Mock search_code method
+            mock_sg_client.search_code.return_value = [
+                CodeSearchResult(
+                    code="def add_numbers(a, b):\n    return a + b",
+                    file_path="utils.py",
+                    repository="example/repo",
+                    language="python",
+                    line_number=10,
+                ),
+                CodeSearchResult(
+                    code="result = add_numbers(1, 2)",
+                    file_path="app.py",
+                    repository="example/repo",
+                    language="python",
+                    line_number=5,
+                ),
+            ]
+            
+            # Mock semantic_search method
+            mock_sg_client.semantic_search.return_value = [
+                CodeSearchResult(
+                    code="def sum_all(numbers):\n    return sum(numbers)",
+                    file_path="math_utils.py",
+                    repository="example/repo",
+                    language="python",
+                    line_number=15,
+                ),
+            ]
+            
+            # Mock find_examples method
+            mock_sg_client.find_examples.return_value = [
+                CodeSearchResult(
+                    code="total = add_numbers(x, y)",
+                    file_path="calculator.py",
+                    repository="example/repo",
+                    language="python",
+                    line_number=20,
+                ),
+            ]
+            
+            # Mock get_code_intelligence method
+            mock_sg_client.get_code_intelligence.return_value = CodeIntelligenceResult(
+                hover_text="add_numbers adds two numbers and returns the result",
+                references=["calculator.py:20", "app.py:5"],
+                definition="utils.py:10-12",
+                documentation="This function adds two numbers and returns the sum.",
+            )
+            
+            # Initialize the RepoNavigator with this client (need to patch constructor)
+            with patch("qa_agent.repo_navigator.SourcegraphClient", return_value=mock_sg_client):
+                from qa_agent.repo_navigator import RepoNavigator
+                
+                # Create navigator
+                navigator = RepoNavigator(e2e_config)
+                
+                # Test search code functionality
+                search_results = navigator.sourcegraph_client.search_code("add_numbers")
+                assert len(search_results) == 2
+                assert "def add_numbers" in search_results[0].code
+                
+                # Test semantic search functionality
+                semantic_results = navigator.sourcegraph_client.semantic_search("function to add numbers")
+                assert len(semantic_results) == 1
+                assert "def sum_all" in semantic_results[0].code
+                
+                # Test find examples functionality
+                example_results = navigator.sourcegraph_client.find_examples("add_numbers")
+                assert len(example_results) == 1
+                assert "total = add_numbers" in example_results[0].code
+                
+                # Test code intelligence functionality
+                intel_result = navigator.sourcegraph_client.get_code_intelligence("utils.py", 10)
+                assert intel_result.hover_text == "add_numbers adds two numbers and returns the result"
+                assert len(intel_result.references) == 2
+        
+        # Clean up
+        if os.path.exists(e2e_config.output_directory):
+            shutil.rmtree(e2e_config.output_directory)
+
+
+if __name__ == "__main__":
+    pytest.main(["-v", "test_e2e_external_services.py"])

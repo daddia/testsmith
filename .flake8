@@ -1,0 +1,8 @@
+[flake8]
+max-line-length = 100
+exclude = .git,__pycache__,build,dist,.cache,generated_tests,test_output,temp
+extend-ignore = E203
+# Whitespace before ':' (conflicts with Black)
+per-file-ignores =
+    __init__.py:F401,F403
+    tests/**/*:E501

@@ -1,0 +1,97 @@
+# Installation Guide
+
+Follow these steps to install QA Agent and all its dependencies in your environment.
+
+## System Requirements
+
+- **Operating System**: Linux, macOS, or Windows
+- **Python**: Version 3.9 or higher
+- **Disk Space**: Approximately 200MB for all dependencies
+- **Memory**: Minimum 2GB, 4GB recommended
+
+## Standard Installation
+
+### Using pip (Recommended)
+
+```bash
+pip install qa-agent
+```
+
+This will install QA Agent and its core dependencies.
+
+### Optional Dependencies
+
+Some features require additional dependencies:
+
+```bash
+# For parallel processing and incremental testing
+pip install gitpython
+
+# For Sourcegraph integration
+pip install qa-agent[sourcegraph]
+
+# For all optional features
+pip install qa-agent[all]
+```
+
+## Installation from Source
+
+If you prefer to install from source:
+
+```bash
+# Clone the repository
+git clone https://github.com/your-org/qa-agent.git
+cd qa-agent
+
+# Install in development mode
+pip install -e .
+```
+
+## API Key Setup
+
+QA Agent requires an API key for the selected AI provider:
+
+```bash
+# For OpenAI (default)
+export OPENAI_API_KEY="your-openai-api-key"
+
+# For Anthropic
+export ANTHROPIC_API_KEY="your-anthropic-api-key"
+
+# For GitHub Copilot
+export GITHUB_COPILOT_API_KEY="your-github-copilot-api-key"
+```
+
+You can also specify the API key interactively when running QA Agent, or in a configuration file.
+
+## Docker Installation
+
+For containerised environments:
+
+```bash
+# Pull the Docker image
+docker pull qa-agent/qa-agent:latest
+
+# Run QA Agent using Docker
+docker run -v $(pwd):/repo -e OPENAI_API_KEY="your-api-key" qa-agent/qa-agent:latest --repo-path /repo
+```
+
+## Troubleshooting
+
+### Common Issues
+
+- **"Command not found" error**: Ensure the Python bin directory is in your PATH
+- **Dependency conflicts**: Try using a virtual environment with `python -m venv venv`
+- **API key issues**: Check that your API key is set correctly in the environment
+
+If you encounter any other issues, see our [FAQs](/faqs) or [open an issue](https://github.com/your-org/qa-agent/issues).
+
+## Verifying Installation
+
+After installation, verify everything is working:
+
+```bash
+qa-agent --version
+```
+
+You should see the version number printed to the console.

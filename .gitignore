@@ -1,12 +1,3 @@
-# Replit
-.replit
-replit.nix
-generated-icon.png
-attached_assets/
-codecov.yml
-coverage.json
-coverage.xml
-
 # Byte-compiled / optimized / DLL files
 __pycache__/
 

@@ -14,18 +14,18 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 
 import pytest
 
-# Add the root directory to the path to import qa_agent modules
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-
 from qa_agent.config import QAAgentConfig
 from qa_agent.models import CodeFile, FileType, Function, GeneratedTest, TestResult
+
+# Add the root directory to the path to import qa_agent modules
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 
 def pytest_ignore_collect(collection_path, config):
     """
     Custom hook to explicitly ignore specific files or directories during collection.
     Returns True if the path should be ignored, False otherwise.
-    
+
     Args:
         collection_path (pathlib.Path): The path being considered for collection
         config: The pytest config object

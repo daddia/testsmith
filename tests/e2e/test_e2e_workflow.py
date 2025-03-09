@@ -21,7 +21,9 @@ class TestQAAgentE2E:
     """End-to-end tests for the QA Agent workflow."""
 
     @pytest.mark.e2e
-    def test_full_workflow_with_mock_api(self, mocker, sample_repo_path, e2e_config, mock_openai_responses):
+    def test_full_workflow_with_mock_api(
+        self, mocker, sample_repo_path, e2e_config, mock_openai_responses
+    ):
         """Test the full QA Agent workflow with mock API responses."""
         # Set up configuration
         e2e_config.repo_path = sample_repo_path
@@ -30,8 +32,10 @@ class TestQAAgentE2E:
 
         # Create mocks with pytest-mock
         mock_validate = mocker.patch("qa_agent.workflows.QAWorkflow._validate_test")
-        mock_identify = mocker.patch("qa_agent.workflows.CodeAnalysisAgent.identify_critical_functions")
-        
+        mock_identify = mocker.patch(
+            "qa_agent.workflows.CodeAnalysisAgent.identify_critical_functions"
+        )
+
         # Create a test function
         test_function = Function(
             name="add_numbers",
@@ -45,10 +49,10 @@ class TestQAAgentE2E:
             dependencies=[],
             complexity=1,
         )
-        
+
         # Mock the identify_critical_functions method
         mock_identify.return_value = [test_function]
-        
+
         # Mock successful test validation
         mock_validate.side_effect = lambda state: {
             **state,
@@ -83,7 +87,9 @@ class TestQAAgentE2E:
             shutil.rmtree(e2e_config.output_directory)
 
     @pytest.mark.e2e
-    def test_workflow_with_failing_tests(self, mocker, sample_repo_path, e2e_config, mock_openai_responses):
+    def test_workflow_with_failing_tests(
+        self, mocker, sample_repo_path, e2e_config, mock_openai_responses
+    ):
         """Test the QA Agent workflow with failing tests."""
         # Set up configuration
         e2e_config.repo_path = sample_repo_path
@@ -93,7 +99,9 @@ class TestQAAgentE2E:
         # Create mocks with pytest-mock
         mock_validate = mocker.patch("qa_agent.workflows.QAWorkflow._validate_test")
         mock_fix = mocker.patch("qa_agent.workflows.QAWorkflow._fix_test")
-        mock_identify = mocker.patch("qa_agent.workflows.CodeAnalysisAgent.identify_critical_functions")
+        mock_identify = mocker.patch(
+            "qa_agent.workflows.CodeAnalysisAgent.identify_critical_functions"
+        )
         mock_generate = mocker.patch("qa_agent.workflows.TestGenerationAgent.generate_test")
 
         # Mock failing test validation
@@ -123,10 +131,10 @@ class TestQAAgentE2E:
             dependencies=[],
             complexity=1,
         )
-        
+
         # Mock the identify_critical_functions method
         mock_identify.return_value = [test_function]
-        
+
         # Create a mock generated test
         mock_test = GeneratedTest(
             function=test_function,
@@ -136,10 +144,10 @@ class TestQAAgentE2E:
             mocks=[],
             fixtures=[],
         )
-        
+
         # Mock the generate_test method
         mock_generate.return_value = mock_test
-        
+
         # Mock test fix to return a successful test on the second attempt
         mock_fix.side_effect = lambda state: {
             **state,
@@ -183,10 +191,10 @@ class TestQAAgentE2E:
 
         # Create a mock run method that raises directly
         run_mock = mocker.Mock(side_effect=Exception("Test error: Could not identify functions"))
-        
+
         # Create the workflow
         workflow = QAWorkflow(e2e_config)
-        
+
         # Replace the run method with our mock
         mocker.patch.object(workflow, "run", run_mock)
 

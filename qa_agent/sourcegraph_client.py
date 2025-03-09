@@ -13,7 +13,7 @@ from urllib.parse import quote
 import requests
 
 from qa_agent.config import QAAgentConfig
-from qa_agent.error_recovery import ErrorHandler, CircuitBreaker
+from qa_agent.error_recovery import CircuitBreaker, ErrorHandler
 from qa_agent.models import CodeIntelligenceResult, CodeSearchResult
 from qa_agent.utils.logging import log_exception
 
@@ -35,18 +35,12 @@ class SourcegraphClient:
         self.limited_mode = False
 
         self.headers = {"Content-Type": "application/json", "Accept": "application/json"}
-        
+
         # Initialize error handler with standardized configuration
-        self.error_handler = ErrorHandler(
-            max_retries=3, 
-            backoff_factor=1.5
-        )
-        
+        self.error_handler = ErrorHandler(max_retries=3, backoff_factor=1.5)
+
         # Initialize circuit breaker for API requests
-        self.circuit_breaker = CircuitBreaker(
-            failure_threshold=5,
-            recovery_timeout=60
-        )
+        self.circuit_breaker = CircuitBreaker(failure_threshold=5, recovery_timeout=60)
 
         if self.api_token:
             self.headers["Authorization"] = f"token {self.api_token}"
@@ -77,12 +71,12 @@ class SourcegraphClient:
             List of CodeSearchResult objects
         """
         logger.info(f"Searching Sourcegraph with query: {query}")
-        
+
         # Check if circuit breaker allows execution
         if not self.circuit_breaker.can_execute("sourcegraph_search"):
             logger.warning("Circuit breaker is open. Skipping Sourcegraph API call.")
             return []
-            
+
         def _execute_search() -> List[CodeSearchResult]:
             """Internal function to execute search with error handling"""
             url = f"{self.api_endpoint}/search/stream"
@@ -131,7 +125,7 @@ class SourcegraphClient:
                             f"Failed to parse JSON from Sourcegraph response line: {line}"
                         )
                         log_exception(logger, "search_code", json_err, {"line": line})
-            
+
             self.circuit_breaker.record_success("sourcegraph_search")
             logger.info(f"Found {len(results)} code search results")
             return results
@@ -145,8 +139,8 @@ class SourcegraphClient:
                 recoverable_exceptions=[
                     requests.exceptions.ConnectionError,
                     requests.exceptions.Timeout,
-                    requests.exceptions.HTTPError
-                ]
+                    requests.exceptions.HTTPError,
+                ],
             )
             return results
         except Exception as e:
@@ -240,7 +234,9 @@ class SourcegraphClient:
 
         except requests.RequestException as e:
             self.circuit_breaker.record_failure("code_intelligence")
-            log_exception(logger, "get_code_intelligence", e, {"file_path": file_path, "line": line})
+            log_exception(
+                logger, "get_code_intelligence", e, {"file_path": file_path, "line": line}
+            )
             logger.error(f"Error getting code intelligence: {str(e)}")
             return None
 
@@ -261,7 +257,7 @@ class SourcegraphClient:
 
             response = requests.get(url, headers=self.headers)
             response.raise_for_status()
-            
+
             self.circuit_breaker.record_success("scip_index")
             return {"status": "success", "bytes": len(response.content)}
 
@@ -298,7 +294,7 @@ class SourcegraphClient:
         def _execute_search():
             """Inner function to execute the function example search."""
             return self.search_code(query, limit)
-            
+
         try:
             # Use error handler with retry mechanism
             results = self.error_handler.execute_with_retry(
@@ -308,8 +304,8 @@ class SourcegraphClient:
                 recoverable_exceptions=[
                     requests.exceptions.ConnectionError,
                     requests.exceptions.Timeout,
-                    requests.exceptions.HTTPError
-                ]
+                    requests.exceptions.HTTPError,
+                ],
             )
             self.circuit_breaker.record_success("function_examples")
             return results
@@ -318,7 +314,7 @@ class SourcegraphClient:
             self.circuit_breaker.record_failure("function_examples")
             log_exception(logger, "find_examples", e, {"function_name": function_name})
             logger.warning(f"Function example search failed: {str(e)}")
-            
+
             # Try a more basic search as fallback
             basic_query = function_name
             return self.search_code(basic_query, limit)
@@ -350,7 +346,7 @@ class SourcegraphClient:
                 return self.search_code(query, limit)
             else:
                 return self.semantic_search(code_snippet, limit)
-                
+
         try:
             # Use error handler with retry mechanism
             results = self.error_handler.execute_with_retry(
@@ -360,8 +356,8 @@ class SourcegraphClient:
                 recoverable_exceptions=[
                     requests.exceptions.ConnectionError,
                     requests.exceptions.Timeout,
-                    requests.exceptions.HTTPError
-                ]
+                    requests.exceptions.HTTPError,
+                ],
             )
             self.circuit_breaker.record_success("related_code_search")
             return results

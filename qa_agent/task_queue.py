@@ -168,11 +168,11 @@ class TaskQueue:
         """
         self.tasks.put(task)
         logger.debug("Task added to queue", function=task.function.name, priority=task.priority)
-        
+
     def _get_all_tasks_safely(self) -> List[TestTask]:
         """
         Safely get all tasks from the queue without blocking.
-        
+
         Returns:
             List of tasks
         """
@@ -371,7 +371,7 @@ class TaskQueue:
 
                 # Collect all tasks first to avoid queue issues
                 all_tasks = self._get_all_tasks_safely()
-                
+
                 # Submit all tasks to the executor at once
                 for task in all_tasks:
                     future = executor.submit(self._process_task, task, generate_func, validate_func)
@@ -401,13 +401,13 @@ class TaskQueue:
                             if not t.status == "completed":
                                 task = t
                                 break
-                        
+
                         if task:
                             self.results.append(
                                 TaskResult(
                                     task=task,
                                     success=False,
-                                    error="Task timed out after 60 seconds"
+                                    error="Task timed out after 60 seconds",
                                 )
                             )
                     except Exception as e:
@@ -417,31 +417,29 @@ class TaskQueue:
 
             # Process tasks sequentially - first collect all tasks
             all_tasks = self._get_all_tasks_safely()
-                    
+
             # Process each task with a timeout mechanism
             for task in all_tasks:
                 try:
                     # Use threading with timeout even for sequential processing
                     with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
-                        future = executor.submit(self._process_task, task, generate_func, validate_func)
+                        future = executor.submit(
+                            self._process_task, task, generate_func, validate_func
+                        )
                         result = future.result(timeout=60)  # 60 second timeout per task
                         self.results.append(result)
                 except concurrent.futures.TimeoutError:
                     logger.error(f"Timeout occurred while processing task: {task.function.name}")
                     self.results.append(
                         TaskResult(
-                            task=task,
-                            success=False,
-                            error="Task timed out after 60 seconds"
+                            task=task, success=False, error="Task timed out after 60 seconds"
                         )
                     )
                 except Exception as e:
                     logger.exception(f"Error processing task: {task.function.name}")
                     self.results.append(
                         TaskResult(
-                            task=task,
-                            success=False,
-                            error=f"Task processing error: {str(e)}"
+                            task=task, success=False, error=f"Task processing error: {str(e)}"
                         )
                     )
 

@@ -1,11 +1,13 @@
 import pytest
+
 from qa_agent.console_reader import (
-    ReposWorklowConsoleReader,
-    IDNAError,
     IDNABidiError,
+    IDNAError,
     InvalidCodepoint,
-    InvalidCodepointContext
+    InvalidCodepointContext,
+    ReposWorklowConsoleReader,
 )
+
 
 def test_extract_pytest_results_basic():
     """
@@ -19,33 +21,23 @@ def test_extract_pytest_results_basic():
         "",
         "test_sample.py::test_passed PASSED",
         "",
-        "============================== 1 passed in 0.01s =============================="
+        "============================== 1 passed in 0.01s ==============================",
     ]
     expected_result = {
-        'summary': {
-            'total': 1,
-            'passed': 1,
-            'failed': 0,
-            'skipped': 0,
-            'xfailed': 0,
-            'errors': 0
-        },
-        'tests': [
-            {
-                'name': 'test_passed',
-                'path': 'test_sample.py::test_passed',
-                'status': 'PASSED'
-            }
+        "summary": {"total": 1, "passed": 1, "failed": 0, "skipped": 0, "xfailed": 0, "errors": 0},
+        "tests": [
+            {"name": "test_passed", "path": "test_sample.py::test_passed", "status": "PASSED"}
         ],
-        'coverage': None,
-        'failing_tests': []
+        "coverage": None,
+        "failing_tests": [],
     }
-    
+
     # Act
     result = reader.extract_pytest_results(lines)
-    
+
     # Assert
     assert result == expected_result
+
 
 def test_extract_pytest_results_with_failures():
     """
@@ -63,38 +55,24 @@ def test_extract_pytest_results_with_failures():
         "=========================== short test summary info ===========================",
         "FAILED test_sample.py::test_failed - AssertionError: assert 1 == 2",
         "",
-        "============================== 1 failed, 1 passed in 0.02s ==============================="
+        "============================== 1 failed, 1 passed in 0.02s ===============================",
     ]
     expected_result = {
-        'summary': {
-            'total': 2,
-            'passed': 1,
-            'failed': 1,
-            'skipped': 0,
-            'xfailed': 0,
-            'errors': 0
-        },
-        'tests': [
-            {
-                'name': 'test_passed',
-                'path': 'test_sample.py::test_passed',
-                'status': 'PASSED'
-            },
-            {
-                'name': 'test_failed',
-                'path': 'test_sample.py::test_failed',
-                'status': 'FAILED'
-            }
+        "summary": {"total": 2, "passed": 1, "failed": 1, "skipped": 0, "xfailed": 0, "errors": 0},
+        "tests": [
+            {"name": "test_passed", "path": "test_sample.py::test_passed", "status": "PASSED"},
+            {"name": "test_failed", "path": "test_sample.py::test_failed", "status": "FAILED"},
         ],
-        'coverage': None,
-        'failing_tests': ['test_sample.py::test_failed']
+        "coverage": None,
+        "failing_tests": ["test_sample.py::test_failed"],
     }
-    
+
     # Act
     result = reader.extract_pytest_results(lines)
-    
+
     # Assert
     assert result == expected_result
+
 
 def test_extract_pytest_results_with_coverage():
     """
@@ -115,33 +93,30 @@ def test_extract_pytest_results_with_coverage():
         "---------------------------------------------",
         "TOTAL                        10      0   100%",
         "",
-        "============================== 1 passed in 0.01s =============================="
+        "============================== 1 passed in 0.01s ==============================",
     ]
-    
+
     # Act
     result = reader.extract_pytest_results(lines)
-    
+
     # Assert
     # Verify the content of the result dictionary except for the coverage
     # field which may be None in the actual implementation
-    assert result['summary'] == {
-        'total': 1,
-        'passed': 1,
-        'failed': 0,
-        'skipped': 0,
-        'xfailed': 0,
-        'errors': 0
+    assert result["summary"] == {
+        "total": 1,
+        "passed": 1,
+        "failed": 0,
+        "skipped": 0,
+        "xfailed": 0,
+        "errors": 0,
     }
-    assert result['tests'] == [
-        {
-            'name': 'test_passed',
-            'path': 'test_sample.py::test_passed',
-            'status': 'PASSED'
-        }
+    assert result["tests"] == [
+        {"name": "test_passed", "path": "test_sample.py::test_passed", "status": "PASSED"}
     ]
-    assert result['failing_tests'] == []
+    assert result["failing_tests"] == []
     # The coverage value should either be 100 or None depending on the implementation
-    assert result['coverage'] in (100, None)
+    assert result["coverage"] in (100, None)
+
 
 def test_extract_pytest_results_with_idna_error():
     """
@@ -155,6 +130,7 @@ def test_extract_pytest_results_with_idna_error():
     with pytest.raises(IDNAError, match="Test-triggered IDNA Error"):
         reader.extract_pytest_results(lines)
 
+
 def test_extract_pytest_results_with_idnabidi_error():
     """
     Test extract_pytest_results with IDNABidiError trigger.
@@ -166,6 +142,7 @@ def test_extract_pytest_results_with_idnabidi_error():
     # Act & Assert
     with pytest.raises(IDNABidiError, match="Test-triggered IDNA Bidi Error"):
         reader.extract_pytest_results(lines)
+
 
 def test_extract_pytest_results_with_invalid_codepoint():
     """
@@ -179,6 +156,7 @@ def test_extract_pytest_results_with_invalid_codepoint():
     with pytest.raises(InvalidCodepoint, match="Test-triggered Invalid Codepoint"):
         reader.extract_pytest_results(lines)
 
+
 def test_extract_pytest_results_with_invalid_codepoint_context():
     """
     Test extract_pytest_results with InvalidCodepointContext trigger.
@@ -190,6 +168,7 @@ def test_extract_pytest_results_with_invalid_codepoint_context():
     # Act & Assert
     with pytest.raises(InvalidCodepointContext, match="Test-triggered Invalid Codepoint Context"):
         reader.extract_pytest_results(lines)
+
 
 def test_extract_pytest_results_edge_case():
     """
@@ -203,33 +182,23 @@ def test_extract_pytest_results_edge_case():
         "",
         "test_sample.py::test_edge_case PASSED",
         "",
-        "============================== 1 passed in 0.01s =============================="
+        "============================== 1 passed in 0.01s ==============================",
     ]
     expected_result = {
-        'summary': {
-            'total': 1,
-            'passed': 1,
-            'failed': 0,
-            'skipped': 0,
-            'xfailed': 0,
-            'errors': 0
-        },
-        'tests': [
-            {
-                'name': 'test_edge_case',
-                'path': 'test_sample.py::test_edge_case',
-                'status': 'PASSED'
-            }
+        "summary": {"total": 1, "passed": 1, "failed": 0, "skipped": 0, "xfailed": 0, "errors": 0},
+        "tests": [
+            {"name": "test_edge_case", "path": "test_sample.py::test_edge_case", "status": "PASSED"}
         ],
-        'coverage': None,
-        'failing_tests': []
+        "coverage": None,
+        "failing_tests": [],
     }
-    
+
     # Act
     result = reader.extract_pytest_results(lines)
-    
+
     # Assert
     assert result == expected_result
+
 
 def test_extract_pytest_results_no_tests():
     """
@@ -243,24 +212,17 @@ def test_extract_pytest_results_no_tests():
         "rootdir: /path/to/project",
         "collected 0 items",
         "",
-        "============================== no tests ran in 0.12s ==============================="
+        "============================== no tests ran in 0.12s ===============================",
     ]
     expected_result = {
-        'summary': {
-            'total': 0,
-            'passed': 0,
-            'failed': 0,
-            'skipped': 0,
-            'xfailed': 0,
-            'errors': 0
-        },
-        'tests': [],
-        'coverage': None,
-        'failing_tests': []
+        "summary": {"total": 0, "passed": 0, "failed": 0, "skipped": 0, "xfailed": 0, "errors": 0},
+        "tests": [],
+        "coverage": None,
+        "failing_tests": [],
     }
-    
+
     # Act
     result = reader.extract_pytest_results(lines)
-    
+
     # Assert
     assert result == expected_result

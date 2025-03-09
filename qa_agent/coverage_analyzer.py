@@ -14,7 +14,7 @@ from datetime import datetime
 from typing import Dict, List, Optional, Tuple
 
 from qa_agent.call_graph_analyzer import CallGraphAnalyzer
-from qa_agent.error_recovery import ErrorHandler, CircuitBreaker
+from qa_agent.error_recovery import CircuitBreaker, ErrorHandler
 from qa_agent.git_history_analyzer import GitHistoryAnalyzer
 from qa_agent.models import CodeFile, CoverageReport, Function
 from qa_agent.parser import CodeParserFactory
@@ -37,18 +37,14 @@ class CoverageAnalyzer:
         """
         self.repo_path = repo_path
         self.test_framework = test_framework
-        
+
         # Set up error handling components
         self.circuit_breaker = CircuitBreaker(
-            failure_threshold=3,
-            recovery_timeout=60,
-            half_open_max_calls=2
+            failure_threshold=3, recovery_timeout=60, half_open_max_calls=2
         )
-        
+
         self.error_handler = ErrorHandler(
-            max_retries=3,
-            backoff_factor=1.5,
-            circuit_breaker=self.circuit_breaker
+            max_retries=3, backoff_factor=1.5, circuit_breaker=self.circuit_breaker
         )
 
     def run_coverage_analysis(self) -> CoverageReport:
@@ -71,7 +67,14 @@ class CoverageAnalyzer:
 
                 # Run tests with coverage
                 if self.test_framework == "pytest":
-                    cmd = ["python", "-m", "pytest", "--cov=.", "--cov-report=xml", "--cov-report=json"]
+                    cmd = [
+                        "python",
+                        "-m",
+                        "pytest",
+                        "--cov=.",
+                        "--cov-report=xml",
+                        "--cov-report=json",
+                    ]
                     try:
                         subprocess.run(cmd, check=True, capture_output=True)
                     except subprocess.CalledProcessError as e:
@@ -84,7 +87,9 @@ class CoverageAnalyzer:
                         # Create empty coverage files if they don't exist
                         if not os.path.exists("coverage.xml"):
                             with open("coverage.xml", "w") as f:
-                                f.write('<?xml version="1.0" ?><coverage version="6.4.4"></coverage>')
+                                f.write(
+                                    '<?xml version="1.0" ?><coverage version="6.4.4"></coverage>'
+                                )
                         if not os.path.exists("coverage.json"):
                             with open("coverage.json", "w") as f:
                                 f.write('{"meta": {"version": "6.4.4"}, "files": {}}')
@@ -94,7 +99,7 @@ class CoverageAnalyzer:
                 # Parse coverage report
                 coverage_report = self._parse_coverage_report()
                 return coverage_report
-            
+
             except Exception as e:
                 log_exception(logger, "run_coverage_analysis", e, {"repo_path": self.repo_path})
                 # Re-raise for the error handler to handle
@@ -109,7 +114,7 @@ class CoverageAnalyzer:
                 _run_analysis,
                 operation_name="coverage_analysis",
                 error_context={"repo_path": self.repo_path, "framework": self.test_framework},
-                diagnostic_level="detailed"
+                diagnostic_level="detailed",
             )
             return result
         except Exception:

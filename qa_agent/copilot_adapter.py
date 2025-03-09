@@ -12,7 +12,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import requests
 
 from qa_agent.config import QAAgentConfig
-from qa_agent.error_recovery import ErrorHandler, CircuitBreaker
+from qa_agent.error_recovery import CircuitBreaker, ErrorHandler
 from qa_agent.models import CodeFile, Function
 from qa_agent.utils.logging import log_exception
 
@@ -47,18 +47,14 @@ class CopilotAdapter:
             "Accept": "application/json",
             "X-GitHub-Api-Version": "2022-11-28",
         }
-        
+
         # Set up error handling components
         self.circuit_breaker = CircuitBreaker(
-            failure_threshold=3,
-            recovery_timeout=60,
-            half_open_max_calls=2
+            failure_threshold=3, recovery_timeout=60, half_open_max_calls=2
         )
-        
+
         self.error_handler = ErrorHandler(
-            max_retries=3,
-            backoff_factor=1.5,
-            circuit_breaker=self.circuit_breaker
+            max_retries=3, backoff_factor=1.5, circuit_breaker=self.circuit_breaker
         )
 
         logger.info(f"Initialized GitHub Copilot adapter with model version: {self.model_version}")
@@ -159,7 +155,7 @@ Please provide the complete test code.
             try:
                 api_response = requests.post(url, headers=self.headers, json=payload)
                 api_response.raise_for_status()
-                
+
                 data = api_response.json()
                 return data.get("choices", [{}])[0].get("text", "")
             except requests.RequestException as e:
@@ -168,7 +164,7 @@ Please provide the complete test code.
                 if hasattr(e, "response") and e.response:
                     if hasattr(e.response, "status_code"):
                         status_code = e.response.status_code
-                
+
                 error_context = {
                     "url": url,
                     "model": self.model_version,
@@ -184,7 +180,7 @@ Please provide the complete test code.
                 api_call,
                 operation_name="copilot_api_call",
                 error_context={"prompt_length": len(prompt)},
-                diagnostic_level="detailed"
+                diagnostic_level="detailed",
             )
             return result
         except Exception as e:

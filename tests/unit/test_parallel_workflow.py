@@ -9,9 +9,10 @@ import os
 import sys
 from datetime import datetime
 from typing import Any, Dict, List, cast
+
 # Remember that pytest-mock is the preferred way to mock in tests
 # This import is kept for backward compatibility
-# IMPORTANT: When writing new tests, always use pytest's mocker fixture 
+# IMPORTANT: When writing new tests, always use pytest's mocker fixture
 # instead of importing directly from unittest.mock
 from unittest.mock import MagicMock, patch
 

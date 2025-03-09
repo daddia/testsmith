@@ -10,6 +10,7 @@ For normal usage, the CLI entry point provided by the package should be used.
 """
 
 import sys
+
 from qa_agent.cli import main as cli_main
 
 if __name__ == "__main__":

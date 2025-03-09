@@ -39,6 +39,7 @@ class IPProtector:
         """
         # Check if first argument is a QAAgentConfig
         from qa_agent.config import QAAgentConfig
+
         if isinstance(config_or_patterns, QAAgentConfig):
             config = config_or_patterns
             self.protected_patterns = config.protected_patterns or []
@@ -189,7 +190,7 @@ class IPProtector:
         """
         # If the file is in the protected files list, fully redact it
         file_should_be_redacted = False
-        
+
         for protected_pattern in self.protected_files:
             # Handle glob patterns like **/secrets.py
             if protected_pattern.startswith("**/"):
@@ -202,7 +203,7 @@ class IPProtector:
             elif code_file.path.endswith(protected_pattern):
                 file_should_be_redacted = True
                 break
-                
+
         if file_should_be_redacted:
             log_redacted(logger, code_file.path)
             return CodeFile(
@@ -231,20 +232,20 @@ class IPProtector:
         """
         # If the function name matches a protected pattern, fully redact it
         function_should_be_redacted = False
-        
+
         for pattern in self.protected_functions:
             # Handle wildcard patterns like auth_* or *_credentials
-            if pattern.endswith('*') and function.name.startswith(pattern[:-1]):
+            if pattern.endswith("*") and function.name.startswith(pattern[:-1]):
                 function_should_be_redacted = True
                 break
-            elif pattern.startswith('*') and function.name.endswith(pattern[1:]):
+            elif pattern.startswith("*") and function.name.endswith(pattern[1:]):
                 function_should_be_redacted = True
                 break
             # Handle exact matches
             elif function.name == pattern:
                 function_should_be_redacted = True
                 break
-                
+
         if function_should_be_redacted:
             log_redacted(logger, function.file_path, function.name)
             return Function(

@@ -79,7 +79,7 @@ class TestRepoNavigator:
             "qa_agent.repo_navigator.SourcegraphClient", side_effect=Exception("Test error")
         )
         mock_error = mocker.patch("logging.Logger.error")
-        
+
         navigator = RepoNavigator(mock_config_with_sourcegraph)
 
         assert navigator.config == mock_config_with_sourcegraph
@@ -100,9 +100,11 @@ class TestRepoNavigator:
 
         # Mock os.path.isfile to make every path a file
         mock_isfile = mocker.patch("os.path.isfile", return_value=True)
-        
+
         # Mock open to return file content
-        mock_open = mocker.patch("builtins.open", mocker.mock_open(read_data="test content"), create=True)
+        mock_open = mocker.patch(
+            "builtins.open", mocker.mock_open(read_data="test content"), create=True
+        )
 
         files = navigator.find_all_code_files()
 
@@ -154,20 +156,24 @@ class TestRepoNavigator:
         # We need to create mock AST nodes for imports
         import_os = mocker.MagicMock(spec=["module"])
         import_os.module = "os"  # import os
-        
+
         import_path = mocker.MagicMock(spec=["module", "name"])
         import_path.module = "sys"
         import_path.name = "path"  # from sys import path
-        
+
         other_node = mocker.MagicMock()  # Something else (not an import)
-        
+
         mock_ast.body = [import_os, import_path, other_node]
         mock_parse.return_value = mock_ast
 
-        mock_open = mocker.patch("builtins.open", mocker.mock_open(read_data="import os\nfrom sys import path"), create=True)
-        
+        mock_open = mocker.patch(
+            "builtins.open",
+            mocker.mock_open(read_data="import os\nfrom sys import path"),
+            create=True,
+        )
+
         imports = navigator._extract_imports("/test/repo/src/module.py")
-        
+
         assert imports == {"os", "sys"}
 
     def test_find_related_files(self, mocker, navigator):
@@ -190,12 +196,14 @@ class TestRepoNavigator:
                 {"module", "unittest"},  # test_module.py imports module
             ],
         )
-        
+
         # Mock os.path.isfile to make every path a file
         mock_isfile = mocker.patch("os.path.isfile", return_value=True)
-        
+
         # Mock open to return file content
-        mock_open = mocker.patch("builtins.open", mocker.mock_open(read_data="test content"), create=True)
+        mock_open = mocker.patch(
+            "builtins.open", mocker.mock_open(read_data="test content"), create=True
+        )
 
         related_files = navigator.find_related_files("/test/repo/src/module.py")
 
@@ -279,7 +287,9 @@ class TestRepoNavigator:
         results = navigator.find_semantic_similar_code("def test_function():\n    return True")
         assert results == []
 
-    def test_find_semantic_similar_code_with_sourcegraph(self, mocker, mock_config_with_sourcegraph):
+    def test_find_semantic_similar_code_with_sourcegraph(
+        self, mocker, mock_config_with_sourcegraph
+    ):
         """Test finding semantically similar code with Sourcegraph integration."""
         # Directly mocking the implementation of the specific code section we're testing
         test_search_result = CodeSearchResult(
@@ -303,7 +313,7 @@ class TestRepoNavigator:
         mocker.patch.object(
             RepoNavigator, "find_semantic_similar_code", new=patched_find_semantic_similar_code
         )
-        
+
         navigator = RepoNavigator(mock_config_with_sourcegraph)
 
         # Call the method (which is now our patched version)
@@ -332,7 +342,7 @@ class TestRepoNavigator:
         mocker.patch.object(
             RepoNavigator, "get_code_intelligence", new=patched_get_code_intelligence
         )
-        
+
         navigator = RepoNavigator(mock_config_with_sourcegraph)
 
         # Call the method (which is now our patched version)

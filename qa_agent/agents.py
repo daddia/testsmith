@@ -9,9 +9,13 @@ import time
 from typing import Any, Dict, List, Optional, cast
 
 from qa_agent.config import QAAgentConfig
-from qa_agent.models import CodeFile, FileType, Function
+from qa_agent.console_reader import analyze_console_output
+from qa_agent.coverage_analyzer import CoverageAnalyzer
+from qa_agent.models import CodeFile, FileType, Function, GeneratedTest, TestResult
 from qa_agent.repo_navigator import RepoNavigator
 from qa_agent.test_generator import TestGenerator
+from qa_agent.test_validator import TestValidator
+from qa_agent.utils.formatting import format_function_info
 from qa_agent.utils.logging import (
     get_logger,
     log_analyzed,
@@ -57,25 +61,25 @@ except ImportError:
             self.conditional_edges = {}
             self.edges = {}
             self.state_type = args[0] if args else None
-        
+
         def add_node(self, name, function):
             self.nodes[name] = function
-            
+
         def add_edge(self, start_node, end_node):
             if start_node not in self.edges:
                 self.edges[start_node] = []
             self.edges[start_node].append(end_node)
-            
+
         def add_conditional_edges(self, start_node, router_function, destinations):
             self.conditional_edges[start_node] = (router_function, destinations)
-            
+
         def compile(self):
             return MockCompiledGraph(self)
-            
+
     class MockCompiledGraph:
         def __init__(self, graph):
             self.graph = graph
-            
+
         def invoke(self, state):
             # For test purposes, just return the state
             # In the test case, we're mocking all the node functions anyway
@@ -91,17 +95,6 @@ except ImportError:
         def __init__(self, content: str) -> None:
             self.content = content
 
-
-from typing import cast
-
-from qa_agent.config import QAAgentConfig
-from qa_agent.console_reader import analyze_console_output
-from qa_agent.coverage_analyzer import CoverageAnalyzer
-from qa_agent.models import CodeFile, Function, GeneratedTest, TestResult
-from qa_agent.repo_navigator import RepoNavigator
-from qa_agent.test_generator import TestGenerator
-from qa_agent.test_validator import TestValidator
-from qa_agent.utils.formatting import format_function_info
 
 logger = get_logger(__name__)
 

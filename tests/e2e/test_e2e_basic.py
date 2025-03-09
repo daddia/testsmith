@@ -6,6 +6,7 @@ framework is set up correctly.
 """
 
 import os
+
 import pytest
 
 from qa_agent.config import QAAgentConfig
@@ -30,16 +31,16 @@ class TestBasicE2E:
         """Test that the sample repository structure is created correctly."""
         # Check that the directory exists
         assert os.path.isdir(sample_repo_path)
-        
+
         # Check that the sample module directory exists
         sample_module_dir = os.path.join(sample_repo_path, "sample_module")
         assert os.path.isdir(sample_module_dir)
-        
+
         # Check that the sample files exist
         assert os.path.isfile(os.path.join(sample_module_dir, "__init__.py"))
         assert os.path.isfile(os.path.join(sample_module_dir, "utils.py"))
         assert os.path.isfile(os.path.join(sample_module_dir, "app.py"))
-        
+
         # Verify file contents with a simple check
         with open(os.path.join(sample_module_dir, "utils.py"), "r") as f:
             content = f.read()
@@ -64,7 +65,7 @@ class TestBasicE2E:
             dependencies=[],
             complexity=1,
         )
-        
+
         # Verify the function properties
         assert function.name == "test_function"
         assert function.code == "def test_function():\n    return 'test'"
@@ -86,7 +87,7 @@ class TestBasicE2E:
             content="def test_function():\n    return 'test'",
             type=FileType.PYTHON,
         )
-        
+
         # Verify the code file properties
         assert code_file.path == "/path/to/file.py"
         assert code_file.content == "def test_function():\n    return 'test'"

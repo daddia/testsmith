@@ -47,7 +47,7 @@ class TestQAAgentOnRealProject:
 
         # Mock the identify_critical_functions method to focus on models.py
         mock_identify = mocker.patch.object(code_analysis_agent, "identify_critical_functions")
-        
+
         # Create a function from models.py
         function = Function(
             name="filename",
@@ -71,7 +71,9 @@ class TestQAAgentOnRealProject:
         assert functions[0].name == "filename"
 
         # Get context for the function with the real method
-        mock_find = mocker.patch("qa_agent.agents.RepoNavigator.find_related_files", return_value=[])
+        mock_find = mocker.patch(
+            "qa_agent.agents.RepoNavigator.find_related_files", return_value=[]
+        )
         context_files = code_analysis_agent.get_function_context(functions[0])
         assert mock_find.call_count == 1
 
@@ -80,7 +82,7 @@ class TestQAAgentOnRealProject:
         """Test generating a test for a real function in the project."""
         # Initialize the test generation agent
         test_generation_agent = TestGenerationAgent(self.config)
-        
+
         # Mock the save_test_to_file method to prevent file system operations
         mocker.patch.object(test_generation_agent, "save_test_to_file", return_value=None)
 
@@ -132,14 +134,18 @@ def test_format_function_info():
     assert result == expected
 ```
 """
-        
+
         # Set up the mock response structure
         mock_choice = mocker.MagicMock()
         mock_choice.message = mock_message
         mock_create.return_value = mocker.MagicMock()
         mock_create.return_value.choices = [mock_choice]
-        mock_create.return_value.model_dump = mocker.MagicMock(return_value={"choices": [{"message": {"content": mock_message.content}}]})
-        mock_create.return_value.model_dump.return_value.get = mocker.MagicMock(return_value=[{"message": {"content": mock_message.content}}])
+        mock_create.return_value.model_dump = mocker.MagicMock(
+            return_value={"choices": [{"message": {"content": mock_message.content}}]}
+        )
+        mock_create.return_value.model_dump.return_value.get = mocker.MagicMock(
+            return_value=[{"message": {"content": mock_message.content}}]
+        )
 
         # Generate a test for the function
         generated_test = test_generation_agent.generate_test(function)
@@ -157,7 +163,9 @@ def test_format_function_info():
         config = self.config
 
         # Create and mock the necessary components with pytest-mock
-        mock_identify = mocker.patch("qa_agent.workflows.CodeAnalysisAgent.identify_critical_functions")
+        mock_identify = mocker.patch(
+            "qa_agent.workflows.CodeAnalysisAgent.identify_critical_functions"
+        )
         mock_generate = mocker.patch("qa_agent.workflows.TestGenerationAgent.generate_test")
         mock_validate = mocker.patch("qa_agent.workflows.TestValidationAgent.validate_test")
 
@@ -206,7 +214,7 @@ def test_format_function_info():
 
         # Run the workflow
         workflow = QAWorkflow(config)
-        
+
         # Mock the internal state of the workflow
         state = {
             "status": "Workflow finished",
@@ -214,12 +222,12 @@ def test_format_function_info():
             "failure_count": 0,
             "functions": [function],
             "tests": [mock_test],
-            "results": [mock_validate.return_value]
+            "results": [mock_validate.return_value],
         }
-        
+
         # Mock the run method to return our custom state
         mocker.patch.object(workflow, "run", return_value=state)
-        
+
         # Run the workflow
         final_state = workflow.run()
 

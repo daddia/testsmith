@@ -604,7 +604,11 @@ class CircuitBreaker:
     """
 
     def __init__(
-        self, failure_threshold: int = 5, recovery_timeout: int = 60, half_open_max_calls: int = 3, **kwargs
+        self,
+        failure_threshold: int = 5,
+        recovery_timeout: int = 60,
+        half_open_max_calls: int = 3,
+        **kwargs,
     ):
         """
         Initialize the circuit breaker.
@@ -651,38 +655,37 @@ class CircuitBreaker:
         # Add any kwargs to the log
         if kwargs:
             init_params.update(kwargs)
-            
+
         log_function_call(
             logger,
             "__init__",
             ("CircuitBreaker",),
             init_params,
         )
-        
+
     def __enter__(self):
         """
         Enter the context, checking if the operation can be executed.
         If circuit is open, raises CircuitBreakerOpenError.
-        
+
         Returns:
             The circuit breaker itself
         """
         if self.current_operation and not self.can_execute(self.current_operation):
             raise CircuitBreakerOpenError(
-                f"Circuit is open for operation: {self.current_operation}",
-                {"state": self.state}
+                f"Circuit is open for operation: {self.current_operation}", {"state": self.state}
             )
         return self
-        
+
     def __exit__(self, exc_type, exc_val, exc_tb):
         """
         Exit the context, recording success or failure depending on exception.
-        
+
         Args:
             exc_type: Exception type if an exception was raised, None otherwise
             exc_val: Exception value if an exception was raised, None otherwise
             exc_tb: Exception traceback if an exception was raised, None otherwise
-            
+
         Returns:
             False to propagate exceptions, True to suppress them
         """

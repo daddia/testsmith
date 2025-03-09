@@ -412,15 +412,15 @@ class RepoNavigator:
     def should_ignore(self, path: str) -> bool:
         """
         Public method to check if a path should be ignored.
-        
+
         Args:
             path: Path to check
-            
+
         Returns:
             True if the path should be ignored, False otherwise
         """
         return self._should_ignore(path)
-        
+
     def _extract_important_tokens(self, code_snippet: str) -> List[str]:
         """
         Extract important tokens from a code snippet for similarity matching.

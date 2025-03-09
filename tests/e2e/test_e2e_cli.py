@@ -47,7 +47,7 @@ class TestQAAgentCLI:
 
         # Mock os.environ to include API key
         mocker.patch.dict(os.environ, {"OPENAI_API_KEY": "test-api-key"})
-        
+
         # Run CLI
         run_cli(args)
 
@@ -140,7 +140,9 @@ verbose: true
 
         # Mock everything using pytest-mock
         mock_load_config = mocker.patch("qa_agent.cli.load_config", return_value=config)
-        mock_update_config = mocker.patch("qa_agent.cli.update_config_from_args", return_value=config)
+        mock_update_config = mocker.patch(
+            "qa_agent.cli.update_config_from_args", return_value=config
+        )
         mock_workflow_class = mocker.patch("qa_agent.cli.QAWorkflow")
         mocker.patch.dict(os.environ, {"OPENAI_API_KEY": "test-api-key"})
 

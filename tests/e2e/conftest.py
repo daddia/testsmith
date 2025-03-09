@@ -114,7 +114,7 @@ def test_add_numbers():
     mock_choice = mocker.MagicMock()
     mock_choice.message = mock_message
     mock_create.return_value.choices = [mock_choice]
-    
+
     yield mock_create
 
 

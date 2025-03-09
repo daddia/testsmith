@@ -10,8 +10,8 @@ from typing import Any
 
 from qa_agent.config import QAAgentConfig, load_config, update_config_from_args
 from qa_agent.parallel_workflow import ParallelQAWorkflow
-from qa_agent.workflows import QAWorkflow
 from qa_agent.utils.logging import configure_logging, get_logger, log_exception
+from qa_agent.workflows import QAWorkflow
 
 # Initialize logger for this module
 logger = get_logger(__name__)
@@ -158,7 +158,7 @@ def run_cli(args: Any) -> None:
 def main() -> int:
     """
     Main entry point for the CLI.
-    
+
     Returns:
         int: Exit code (0 for success, non-zero for errors)
     """
@@ -176,9 +176,7 @@ def main() -> int:
     parser.add_argument(
         "--target-coverage", "-t", type=float, help="Target coverage percentage", default=80.0
     )
-    parser.add_argument(
-        "--file", "-f", type=str, help="Specific file to test", default=None
-    )
+    parser.add_argument("--file", "-f", type=str, help="Specific file to test", default=None)
 
     # Parallel processing arguments
     parallel_group = parser.add_argument_group("Parallel Processing")
@@ -244,31 +242,34 @@ def main() -> int:
     # Configure logging using utils.logging
     log_level = "DEBUG" if args.verbose else "INFO"
     configure_logging(log_level)
-    
+
     try:
         # Testing a specific file
         if args.file:
             print(f"Testing specific file: {args.file}")
             # Pass the file path as a module-level variable
             os.environ["QA_AGENT_TEST_FILE"] = args.file
-        
+
         # Check for GitPython if incremental testing is enabled
-        if getattr(args, 'incremental', False):
+        if getattr(args, "incremental", False):
             git_available = False
             try:
                 import importlib.util
+
                 git_spec = importlib.util.find_spec("git")
                 git_available = git_spec is not None
-                
+
                 if git_available:
                     print("GitPython is available for incremental testing")
                 else:
-                    print("Warning: GitPython is not installed but is required for incremental testing")
+                    print(
+                        "Warning: GitPython is not installed but is required for incremental testing"
+                    )
                     print("Run 'pip install gitpython' to enable this feature")
             except Exception as e:
                 print(f"Error checking for GitPython: {str(e)}")
                 print("If incremental testing fails, install GitPython: pip install gitpython")
-        
+
         run_cli(args)
         return 0  # Success
     except KeyboardInterrupt:

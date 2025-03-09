@@ -248,8 +248,8 @@ def update_config_from_args(config: QAAgentConfig, args: Any) -> QAAgentConfig:
     if args.target_coverage:
         config.target_coverage = args.target_coverage
         logger.debug("Updated target coverage", target_coverage=args.target_coverage)
-        
-    if hasattr(args, 'file') and args.file:
+
+    if hasattr(args, "file") and args.file:
         config.specific_file = args.file
         logger.debug("Updated specific file to test", specific_file=args.file)
 
@@ -292,17 +292,17 @@ def update_config_from_args(config: QAAgentConfig, args: Any) -> QAAgentConfig:
 
     if sourcegraph_updates:
         logger.debug("Updated Sourcegraph settings", **sourcegraph_updates)
-        
+
     # Update IP Protection settings if provided
     ip_protection_updates = {}
     if hasattr(args, "enable_ip_protection"):
         config.ip_protection_enabled = args.enable_ip_protection
         ip_protection_updates["enabled"] = args.enable_ip_protection
-        
+
     if hasattr(args, "ip_protection_rules") and args.ip_protection_rules:
         config.ip_protection_rules_path = args.ip_protection_rules
         ip_protection_updates["rules_path"] = args.ip_protection_rules
-        
+
     if ip_protection_updates:
         logger.debug("Updated IP Protection settings", **ip_protection_updates)
 

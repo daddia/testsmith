@@ -1,8 +1,17 @@
 # Corrected test code here
 
+from typing import Any, Dict, List
+
 import pytest
-from qa_agent.console_reader import ReposWorklowConsoleReader, IDNAError, IDNABidiError, InvalidCodepoint, InvalidCodepointContext
-from typing import List, Dict, Any
+
+from qa_agent.console_reader import (
+    IDNABidiError,
+    IDNAError,
+    InvalidCodepoint,
+    InvalidCodepointContext,
+    ReposWorklowConsoleReader,
+)
+
 
 @pytest.fixture
 def sample_lines():
@@ -27,19 +36,21 @@ def sample_lines():
         "TOTAL                        10      2    80%",
     ]
 
+
 def test_extract_pytest_results_basic(sample_lines):
     """Test basic extraction of pytest results."""
     reader = ReposWorklowConsoleReader()
     results = reader.extract_pytest_results(sample_lines)
-    
-    assert results['summary']['total'] == 3
-    assert results['summary']['passed'] == 1
-    assert results['summary']['failed'] == 1
-    assert results['summary']['skipped'] == 1
-    assert results['summary']['errors'] == 0
-    assert results['coverage'] == 80
-    assert len(results['tests']) == 3
-    assert results['failing_tests'] == ['test_sample.py::test_failed']
+
+    assert results["summary"]["total"] == 3
+    assert results["summary"]["passed"] == 1
+    assert results["summary"]["failed"] == 1
+    assert results["summary"]["skipped"] == 1
+    assert results["summary"]["errors"] == 0
+    assert results["coverage"] == 80
+    assert len(results["tests"]) == 3
+    assert results["failing_tests"] == ["test_sample.py::test_failed"]
+
 
 def test_extract_pytest_results_edge_case():
     """Test edge case where only one test is passed."""
@@ -55,22 +66,26 @@ def test_extract_pytest_results_edge_case():
     ]
     reader = ReposWorklowConsoleReader()
     results = reader.extract_pytest_results(lines)
-    
-    assert results['summary']['total'] == 1
-    assert results['summary']['passed'] == 1
-    assert results['summary']['failed'] == 0
-    assert results['summary']['skipped'] == 0
-    assert results['summary']['errors'] == 0
-    assert results['coverage'] is None
-    assert len(results['tests']) == 1
-    assert results['tests'][0]['status'] == 'PASSED'
 
-@pytest.mark.parametrize("error_line, expected_exception", [
-    ("IDNAError test line", IDNAError),
-    ("IDNABidiError test line", IDNABidiError),
-    ("InvalidCodepoint test line", InvalidCodepoint),
-    ("InvalidCodepointContext test line", InvalidCodepointContext),
-])
+    assert results["summary"]["total"] == 1
+    assert results["summary"]["passed"] == 1
+    assert results["summary"]["failed"] == 0
+    assert results["summary"]["skipped"] == 0
+    assert results["summary"]["errors"] == 0
+    assert results["coverage"] is None
+    assert len(results["tests"]) == 1
+    assert results["tests"][0]["status"] == "PASSED"
+
+
+@pytest.mark.parametrize(
+    "error_line, expected_exception",
+    [
+        ("IDNAError test line", IDNAError),
+        ("IDNABidiError test line", IDNABidiError),
+        ("InvalidCodepoint test line", InvalidCodepoint),
+        ("InvalidCodepointContext test line", InvalidCodepointContext),
+    ],
+)
 def test_extract_pytest_results_exceptions(error_line, expected_exception):
     """Test that specific lines trigger the expected exceptions."""
     lines = [
@@ -80,6 +95,7 @@ def test_extract_pytest_results_exceptions(error_line, expected_exception):
     reader = ReposWorklowConsoleReader()
     with pytest.raises(expected_exception):
         reader.extract_pytest_results(lines)
+
 
 def test_extract_pytest_results_no_tests():
     """Test behavior when no tests are present."""
@@ -93,12 +109,12 @@ def test_extract_pytest_results_no_tests():
     ]
     reader = ReposWorklowConsoleReader()
     results = reader.extract_pytest_results(lines)
-    
-    assert results['summary']['total'] == 0
-    assert results['summary']['passed'] == 0
-    assert results['summary']['failed'] == 0
-    assert results['summary']['skipped'] == 0
-    assert results['summary']['errors'] == 0
-    assert results['coverage'] is None
-    assert len(results['tests']) == 0
-    assert len(results['failing_tests']) == 0
+
+    assert results["summary"]["total"] == 0
+    assert results["summary"]["passed"] == 0
+    assert results["summary"]["failed"] == 0
+    assert results["summary"]["skipped"] == 0
+    assert results["summary"]["errors"] == 0
+    assert results["coverage"] is None
+    assert len(results["tests"]) == 0
+    assert len(results["failing_tests"]) == 0
